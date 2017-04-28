@@ -1,0 +1,6 @@
+[package]
+name = "drebbel"
+version = "0.1.0"
+authors = ["John P Mayer Jr <john.p.mayer.jr@gmail.com>"]
+
+[dependencies]
