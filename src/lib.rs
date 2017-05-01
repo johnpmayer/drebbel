@@ -3,29 +3,35 @@ mod ast;
 mod eval;
 mod syntax; // lalrpop
 
-#[cfg(test)]
-use self::ast::{Expression, InfixBinaryOperator, Literal};
+pub use eval::evaluate;
+pub use syntax::parse_Expression;
 
 #[cfg(test)]
-use self::syntax::*;
+use self::ast::*;
+
+#[cfg(test)]
+use self::eval::Value;
 
 #[test]
-fn test_literal_number() {
-    assert!(parse_Literal("1234") == Ok(Literal::Number(1234)));
-}
-
-#[test]
-fn test_term_number() {
+fn test_expression_number() {
     assert_eq!(parse_Expression("1234"), Ok(Box::new(Expression::Lit(Literal::Number(1234)))));
 }
 
 #[test]
-fn test_term_group() {
+fn test_expression_group() {
     assert_eq!(parse_Expression("(1234)"), Ok(Box::new(Expression::Lit(Literal::Number(1234)))));
     // Arbitrarily nested
     assert_eq!(parse_Expression("(((1234)))"), Ok(Box::new(Expression::Lit(Literal::Number(1234)))));
     // Whitespace is ignored
     assert_eq!(parse_Expression("(  1234  )"), Ok(Box::new(Expression::Lit(Literal::Number(1234)))));
+}
+
+#[test]
+fn test_expression_unary() {
+    assert_eq!(parse_Expression("-3"), Ok(Box::new(Expression::ApplyUnOp(
+        UnaryOperator::Minus,
+        Box::new(Expression::Lit(Literal::Number(3)))
+    ))))
 }
 
 #[test]
@@ -74,9 +80,6 @@ fn test_expression_infix_assoc() {
     ))));
 }
 
-#[cfg(test)]
-use self::eval::*;
-
 #[test]
 fn test_evaluate_literal() {
     assert_eq!(evaluate(*parse_Expression("1234").unwrap()), Value::Number(1234));
@@ -84,5 +87,3 @@ fn test_evaluate_literal() {
     assert_eq!(evaluate(*parse_Expression("(123 + 456) - 789").unwrap()), Value::Number(-210));
 }
 
-pub use eval::evaluate;
-pub use syntax::parse_Expression;

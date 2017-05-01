@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use ast::{Literal, InfixBinaryOperator, Expression};
+use ast::{Literal, InfixBinaryOperator, Expression, UnaryOperator};
 
 grammar;
 
@@ -7,12 +7,18 @@ grammar;
 
 Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
 
-pub Literal: Literal = {
+Literal: Literal = {
     <n:Num> => Literal::Number(n),
 };
 
-Term: Box<Expression> = {
+// Skipping the unary plus operator... it feels pointless/academic
+UnaryOp: UnaryOperator = {
+    "-" => UnaryOperator::Minus
+};
+
+Factor: Box<Expression> = {
     Literal => Box::new(Expression::Lit(<>)), // (4)
+    UnaryOp Factor => Box::new(Expression::ApplyUnOp(<>)),
     "(" <Expression> ")",
 };
 
@@ -23,18 +29,18 @@ FactorOp: InfixBinaryOperator = {
 };
 
 // Left-associative; Factor is on left, Term is on right
-Factor: Box<Expression> = {
-    Factor FactorOp Term => Box::new(Expression::ApplyInfixBinOp(<>)),
-    Term,
+Term: Box<Expression> = {
+    Term FactorOp Factor => Box::new(Expression::ApplyInfixBinOp(<>)),
+    Factor,
 };
 
-ExpressionOp: InfixBinaryOperator = { // (3)
+TermOp: InfixBinaryOperator = { // (3)
     "+" => InfixBinaryOperator::Add,
     "-" => InfixBinaryOperator::Sub,
 };
 
 // Left-associative; Expression is on left, Factor is on right
 pub Expression: Box<Expression> = { // (1)
-    Expression ExpressionOp Factor => Box::new(Expression::ApplyInfixBinOp(<>)), // (2)
-    Factor,
+    Expression TermOp Term => Box::new(Expression::ApplyInfixBinOp(<>)), // (2)
+    Term,
 };
