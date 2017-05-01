@@ -1,0 +1,40 @@
+use std::str::FromStr;
+use ast::{Literal, InfixBinaryOperator, Expression};
+
+grammar;
+
+//WS: () = <s:r"[ \n\t]+"> => ();
+
+Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+
+pub Literal: Literal = {
+    <n:Num> => Literal::Number(n),
+};
+
+Term: Box<Expression> = {
+    Literal => Box::new(Expression::Lit(<>)), // (4)
+    "(" <Expression> ")",
+};
+
+FactorOp: InfixBinaryOperator = {
+    "*" => InfixBinaryOperator::Mul,
+    "/" => InfixBinaryOperator::Div,
+    "%" => InfixBinaryOperator::Mod,
+};
+
+// Left-associative; Factor is on left, Term is on right
+Factor: Box<Expression> = {
+    Factor FactorOp Term => Box::new(Expression::ApplyInfixBinOp(<>)),
+    Term,
+};
+
+ExpressionOp: InfixBinaryOperator = { // (3)
+    "+" => InfixBinaryOperator::Add,
+    "-" => InfixBinaryOperator::Sub,
+};
+
+// Left-associative; Expression is on left, Factor is on right
+pub Expression: Box<Expression> = { // (1)
+    Expression ExpressionOp Factor => Box::new(Expression::ApplyInfixBinOp(<>)), // (2)
+    Factor,
+};
