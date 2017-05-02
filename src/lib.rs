@@ -4,7 +4,7 @@ mod eval;
 mod syntax; // lalrpop
 
 pub use eval::evaluate;
-pub use syntax::parse_Expression;
+pub use syntax::{parse_Expression, parse_Program};
 
 #[cfg(test)]
 use self::ast::*;
@@ -77,6 +77,22 @@ fn test_expression_infix_assoc() {
             InfixBinaryOperator::Add,
             Box::new(Expression::Lit(Literal::Number(3)))
         ))
+    ))));
+}
+
+#[test]
+fn test_program() {
+    let source = "\
+    BEGIN \
+        a := 5; \
+        b := a \
+    END. \
+    ";
+    assert_eq!(parse_Program(source), Ok(Program(CompoundStatement(
+        StatementList::Sequence(
+            Statement::Empty,
+            Box::new(StatementList::Single(Statement::Empty))
+        )
     ))));
 }
 

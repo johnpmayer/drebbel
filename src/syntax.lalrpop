@@ -50,11 +50,19 @@ pub Expression: Box<Expression> = {
 
 Statement: Statement = {
     <v:Variable> ":=" <expr:Expression> => Statement::Assignment(v, expr),
-    // Compound
+    CompoundStatement => Statement::Compound(Box::new(<>)),
     => Statement::Empty,
 };
 
 StatementList: StatementList = {
     Statement => StatementList::Single(<>),
     <s:Statement> ";" <sl:StatementList> => StatementList::Sequence(s, Box::new(sl)),
+};
+
+CompoundStatement: CompoundStatement = {
+    "BEGIN" <sl:StatementList> "END" => CompoundStatement(sl),
+};
+
+pub Program: Program = {
+    <cs:CompoundStatement> "." => Program(cs),
 };
