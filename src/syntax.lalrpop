@@ -1,14 +1,16 @@
 use std::str::FromStr;
-use ast::{Literal, InfixBinaryOperator, Expression, UnaryOperator};
+use ast::*;
 
 grammar;
-
-//WS: () = <s:r"[ \n\t]+"> => ();
 
 Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
 
 Literal: Literal = {
     <n:Num> => Literal::Number(n),
+};
+
+Variable: Variable = {
+    <s:r"[a-z][a-zA-Z0-9]*"> => Variable(String::from(s))
 };
 
 // Skipping the unary plus operator... it feels pointless/academic
@@ -17,7 +19,8 @@ UnaryOp: UnaryOperator = {
 };
 
 Factor: Box<Expression> = {
-    Literal => Box::new(Expression::Lit(<>)), // (4)
+    Variable => Box::new(Expression::Var(<>)),
+    Literal => Box::new(Expression::Lit(<>)),
     UnaryOp Factor => Box::new(Expression::ApplyUnOp(<>)),
     "(" <Expression> ")",
 };
@@ -34,13 +37,24 @@ Term: Box<Expression> = {
     Factor,
 };
 
-TermOp: InfixBinaryOperator = { // (3)
+TermOp: InfixBinaryOperator = {
     "+" => InfixBinaryOperator::Add,
     "-" => InfixBinaryOperator::Sub,
 };
 
 // Left-associative; Expression is on left, Factor is on right
-pub Expression: Box<Expression> = { // (1)
-    Expression TermOp Term => Box::new(Expression::ApplyInfixBinOp(<>)), // (2)
+pub Expression: Box<Expression> = {
+    Expression TermOp Term => Box::new(Expression::ApplyInfixBinOp(<>)),
     Term,
+};
+
+Statement: Statement = {
+    <v:Variable> ":=" <expr:Expression> => Statement::Assignment(v, expr),
+    // Compound
+    => Statement::Empty,
+};
+
+StatementList: StatementList = {
+    Statement => StatementList::Single(<>),
+    <s:Statement> ";" <sl:StatementList> => StatementList::Sequence(s, Box::new(sl)),
 };

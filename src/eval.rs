@@ -9,6 +9,7 @@ pub enum Value {
 pub fn evaluate(expr: Expression) -> Value {
     match expr {
         Expression::Lit(Literal::Number(n)) => Value::Number(n),
+        Expression::Var(_) => panic!("Not implemented: evaluate variable"),
         Expression::ApplyUnOp(UnaryOperator::Minus, expr) => {
             let Value::Number(n1) = evaluate(*expr);
             Value::Number(- n1)
