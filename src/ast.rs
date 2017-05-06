@@ -4,7 +4,7 @@ pub enum Literal {
     Number(i64)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Variable(pub String);
 
 #[derive(Debug, PartialEq)]

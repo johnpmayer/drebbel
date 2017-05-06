@@ -48,7 +48,7 @@ pub Expression: Box<Expression> = {
     Term,
 };
 
-Statement: Statement = {
+pub Statement: Statement = {
     <v:Variable> ":=" <expr:Expression> => Statement::Assignment(v, expr),
     CompoundStatement => Statement::Compound(Box::new(<>)),
     => Statement::Empty,
