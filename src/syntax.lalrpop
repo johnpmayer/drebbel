@@ -5,6 +5,17 @@ grammar;
 
 Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
 
+Comma<T>: Vec<T> = { // (0)
+    <v:(<T> ",")*> <e:T?> => match e { // (1)
+        None=> v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
 Literal: Literal = {
     <n:Num> => Literal::Number(n),
 };
@@ -50,13 +61,20 @@ TermOp: InfixBinaryOperator = {
     "-" => InfixBinaryOperator::Sub,
 };
 
+CallSubroutine: Box<Expression>=  {
+    <sub:SubroutineName> "(" <parameters:Comma<Expression>> ")" =>
+        Box::new(Expression::CallSubByValue(sub, parameters))
+};
+
 // Left-associative; Expression is on left, Factor is on right
 pub Expression: Box<Expression> = {
     Expression TermOp Term => Box::new(Expression::ApplyInfixBinOp(<>)),
     Term,
+    CallSubroutine,
 };
 
 pub Statement: Statement = {
+    CallSubroutine => Statement::EvaluateIgnore(<>),
     <v:VariableName> ":=" <expr:Expression> => Statement::Assignment(v, expr),
     "RETURN" <expr:Expression?> => Statement::Return(expr),
     => Statement::Empty,
@@ -72,15 +90,15 @@ CompoundStatement: CompoundStatement = {
 };
 
 Subroutine: (SubroutineName, Subroutine) = {
-    "SUB" <sn:SubroutineName> <vars:VariableName*> <block:CompoundStatement> "." => (sn, Subroutine {
-        parameters: vars,
+    "SUB" <sn:SubroutineName> "(" <parameters:Comma<VariableName>> ")" <block:CompoundStatement> "." => (sn, Subroutine {
+        parameters: parameters,
         block: block
     })
 };
 
 pub Program: Program = {
     <subs:Subroutine*> <cs:CompoundStatement> "." => Program {
-        subroutines: subs.iter().cloned().collect(),
+        subroutines: subs.iter().cloned().collect(), // convert to a Vec<(k,v)> to HashMap<k,v>
         entry: cs
     }
 };

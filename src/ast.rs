@@ -27,11 +27,13 @@ pub enum Expression {
     Var(VariableName),
     Lit(Literal),
     ApplyUnOp(UnaryOperator, Box<Expression>),
-    ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>)
+    ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
+    CallSubByValue(SubroutineName, Vec<Box<Expression>>)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
+    EvaluateIgnore(Box<Expression>),
     Assignment(VariableName, Box<Expression>),
     Return(Option<Box<Expression>>),
     Empty

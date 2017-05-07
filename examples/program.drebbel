@@ -1,4 +1,4 @@
-SUB foo a b
+SUB foo(a, b)
 BEGIN
   c := a * a + b * b;
   RETURN c
@@ -9,5 +9,6 @@ BEGIN
     a := number;
     b := 10 * a + 10 * number / 4;
     c := a - - b;
-    x := 11
+    x := 11;
+    y := foo(a, x)
 END.

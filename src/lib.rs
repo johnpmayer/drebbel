@@ -128,20 +128,20 @@ fn test_program() {
 
 #[test]
 fn test_file_program() {
-//    assert_eq!(parse_Program(programs::file_program("examples/program.drebbel").as_str()), Ok(Program {
-//        subroutines: HashMap::new(),
-//        entry: CompoundStatement(
-//            StatementList::Single(Statement::Empty)
-//        )
-//    }))
-    assert!(parse_Program(programs::file_program("examples/program.drebbel").as_str()).is_ok());
+    let program_source = programs::file_program("examples/program.drebbel");
+    let file_program = parse_Program(program_source.as_str());
+    assert!(file_program.is_ok());
+    let result_scope = evaluate_program(file_program.unwrap());
+    assert!(result_scope.is_ok());
+    println!("{:?}", result_scope.unwrap())
 }
 
 #[test]
 fn test_evaluate_literal() {
-    let empty_scope = Scope::default();
-    assert_eq!(evaluate_expression(&empty_scope, *parse_Expression("1234").unwrap()), Ok(Value::Number(1234)));
-    assert_eq!(evaluate_expression(&empty_scope, *parse_Expression("1234 + 5678").unwrap()), Ok(Value::Number(6912)));
-    assert_eq!(evaluate_expression(&empty_scope, *parse_Expression("(123 + 456) - 789").unwrap()), Ok(Value::Number(-210)));
+    let empty_program = &HashMap::new();
+    let mut empty_scope = Scope::default();
+    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("1234").unwrap()), Ok(Value::Number(1234)));
+    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("1234 + 5678").unwrap()), Ok(Value::Number(6912)));
+    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("(123 + 456) - 789").unwrap()), Ok(Value::Number(-210)));
 }
 
