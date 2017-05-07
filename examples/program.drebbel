@@ -5,10 +5,8 @@ BEGIN
 END.
 
 BEGIN
-    number := 2;
+    number := 6;
     a := number;
-    b := 10 * a + 10 * number / 4;
-    c := a - - b;
-    x := 11;
+    x := 8;
     y := foo(a, x)
 END.

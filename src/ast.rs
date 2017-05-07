@@ -14,12 +14,12 @@ pub struct SubroutineName(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOperator {
-    Minus
+    Minus, Not
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InfixBinaryOperator {
-    Add, Sub, Mul, Div, Mod
+    Add, Sub, Mul, Div, Mod, And, Or, Eq
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -28,7 +28,8 @@ pub enum Expression {
     Lit(Literal),
     ApplyUnOp(UnaryOperator, Box<Expression>),
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
-    CallSubByValue(SubroutineName, Vec<Box<Expression>>)
+    CallSubByValue(SubroutineName, Vec<Box<Expression>>),
+    Conditional(Box<Expression>, Box<Expression>, Box<Expression>)
 }
 
 #[derive(Clone, Debug, PartialEq)]

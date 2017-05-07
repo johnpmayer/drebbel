@@ -1,0 +1,10 @@
+SUB fib (n)
+BEGIN
+  RETURN IF (n == 1) || (n == 2)
+  THEN 1
+  ELSE fib(n - 1) + fib(n - 2)
+END.
+
+BEGIN
+  result := fib(3)
+END.

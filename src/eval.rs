@@ -4,7 +4,8 @@ use ast::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
-    Number(i64)
+    Number(i64),
+    Boolean(bool)
 }
 
 //#[derive(Debug, Hash, PartialEq, Eq)]
@@ -30,7 +31,8 @@ pub enum EvalError {
     NotInScope(VariableName),
     UnknownSubroutine(SubroutineName),
     WrongNumberOfArguments(SubroutineName, usize, usize),
-    SubroutineNullReturn(SubroutineName)
+    SubroutineNullReturn(SubroutineName),
+    TypeError
 }
 
 pub fn evaluate_subroutine(subroutines: &HashMap<SubroutineName, Subroutine>,
@@ -62,33 +64,104 @@ pub fn evaluate_expression(subroutines: &HashMap<SubroutineName, Subroutine>,
             Some(val) => Ok(val.clone())
         },
         &Expression::ApplyUnOp(UnaryOperator::Minus, ref expr) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr)?;
-            Ok(Value::Number(- n1))
+            match evaluate_expression(subroutines, scope, expr)? {
+                Value::Number(n1) => Ok(Value::Number(-n1)),
+                _ => Err(EvalError::TypeError)
+            }
+        },
+        &Expression::ApplyUnOp(UnaryOperator::Not, ref expr) => {
+            match evaluate_expression(subroutines, scope, expr)? {
+                Value::Boolean(b) => Ok(Value::Boolean(!b)),
+                _ => Err(EvalError::TypeError)
+            }
         },
         &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Add, ref expr2) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr1)?;
-            let Value::Number(n2) = evaluate_expression(subroutines, scope, expr2)?;
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
             Ok(Value::Number(n1 + n2))
         },
         &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Sub, ref expr2) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr1)?;
-            let Value::Number(n2) = evaluate_expression(subroutines, scope, expr2)?;
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
             Ok(Value::Number(n1 - n2))
         },
         &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Mul, ref expr2) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr1)?;
-            let Value::Number(n2) = evaluate_expression(subroutines, scope, expr2)?;
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
             Ok(Value::Number(n1 * n2))
         },
         &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Div, ref expr2) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr1)?;
-            let Value::Number(n2) = evaluate_expression(subroutines, scope, expr2)?;
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
             Ok(Value::Number(n1 / n2))
         },
         &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Mod, ref expr2) => {
-            let Value::Number(n1) = evaluate_expression(subroutines, scope, expr1)?;
-            let Value::Number(n2) = evaluate_expression(subroutines, scope, expr2)?;
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
             Ok(Value::Number(n1 % n2))
+        },
+        &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::And, ref expr2) => {
+            let b1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Boolean(b) => b,
+                _ => return Err(EvalError::TypeError)
+            };
+            let b2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Boolean(b) => b,
+                _ => return Err(EvalError::TypeError)
+            };
+            Ok(Value::Boolean(b1 && b2))
+        },
+        &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Or, ref expr2) => {
+            let b1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Boolean(b) => b,
+                _ => return Err(EvalError::TypeError)
+            };
+            let b2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Boolean(b) => b,
+                _ => return Err(EvalError::TypeError)
+            };
+            Ok(Value::Boolean(b1 || b2))
+        },
+        &Expression::ApplyInfixBinOp(ref expr1, InfixBinaryOperator::Eq, ref expr2) => {
+            let n1 = match evaluate_expression(subroutines, scope, expr1)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            let n2 = match evaluate_expression(subroutines, scope, expr2)? {
+                Value::Number(n) => n,
+                _ => return Err(EvalError::TypeError)
+            };
+            Ok(Value::Boolean(n1 == n2))
         },
         &Expression::CallSubByValue(ref sub_name, ref arguments) => {
             match subroutines.get(sub_name) {
@@ -99,6 +172,17 @@ pub fn evaluate_expression(subroutines: &HashMap<SubroutineName, Subroutine>,
                         Some(value) => Ok(value)
                     }
                 }
+            }
+        },
+        &Expression::Conditional(ref test_expr, ref expr_true, ref expr_false) => {
+            let test = match evaluate_expression(subroutines, scope, test_expr)? {
+                Value::Boolean(b) => b,
+                _ => return Err(EvalError::TypeError)
+            };
+            if test {
+                evaluate_expression(subroutines, scope, expr_true)
+            } else {
+                evaluate_expression(subroutines, scope, expr_false)
             }
         }
     }

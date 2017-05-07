@@ -15,6 +15,14 @@ use self::ast::*;
 #[cfg(test)]
 use self::eval::Value;
 
+#[cfg(test)]
+fn assert_ok<T, E>(r: &Result<T, E>) where E: std::fmt::Debug {
+    match r {
+        &Err(ref e) => panic!("Not Ok: {:?}", e),
+        &Ok(_) => ()
+    }
+}
+
 #[test]
 fn test_expression_number() {
     assert_eq!(parse_Expression("1234"), Ok(Box::new(Expression::Lit(Literal::Number(1234)))));
@@ -126,14 +134,20 @@ fn test_program() {
     }));
 }
 
-#[test]
-fn test_file_program() {
-    let program_source = programs::file_program("examples/program.drebbel");
+#[cfg(test)]
+fn assert_example_program(program_name: &str) {
+    let program_source = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
     let file_program = parse_Program(program_source.as_str());
-    assert!(file_program.is_ok());
+    assert_ok(&file_program);
     let result_scope = evaluate_program(file_program.unwrap());
-    assert!(result_scope.is_ok());
+    assert_ok(&result_scope);
     println!("{:?}", result_scope.unwrap())
+}
+
+#[test]
+fn test_file_programs() {
+    assert_example_program("program");
+    assert_example_program("recursion");
 }
 
 #[test]
