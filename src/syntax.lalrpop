@@ -9,17 +9,25 @@ Literal: Literal = {
     <n:Num> => Literal::Number(n),
 };
 
-Variable: Variable = {
-    <s:r"[a-z][a-zA-Z0-9]*"> => Variable(String::from(s))
+Identifier: String = {
+    <s:r"[a-z][a-zA-Z0-9_]*"> => String::from(s)
 };
 
-// Skipping the unary plus operator... it feels pointless/academic
+VariableName: VariableName = {
+    Identifier => VariableName(<>)
+};
+
+SubroutineName: SubroutineName = {
+    Identifier => SubroutineName(<>)
+};
+
+// Skipping the unary plus operator... it feels pointless
 UnaryOp: UnaryOperator = {
     "-" => UnaryOperator::Minus
 };
 
 Factor: Box<Expression> = {
-    Variable => Box::new(Expression::Var(<>)),
+    VariableName => Box::new(Expression::Var(<>)),
     Literal => Box::new(Expression::Lit(<>)),
     UnaryOp Factor => Box::new(Expression::ApplyUnOp(<>)),
     "(" <Expression> ")",
@@ -49,8 +57,8 @@ pub Expression: Box<Expression> = {
 };
 
 pub Statement: Statement = {
-    <v:Variable> ":=" <expr:Expression> => Statement::Assignment(v, expr),
-    CompoundStatement => Statement::Compound(Box::new(<>)),
+    <v:VariableName> ":=" <expr:Expression> => Statement::Assignment(v, expr),
+    "RETURN" <expr:Expression?> => Statement::Return(expr),
     => Statement::Empty,
 };
 
@@ -63,6 +71,16 @@ CompoundStatement: CompoundStatement = {
     "BEGIN" <sl:StatementList> "END" => CompoundStatement(sl),
 };
 
+Subroutine: (SubroutineName, Subroutine) = {
+    "SUB" <sn:SubroutineName> <vars:VariableName*> <block:CompoundStatement> "." => (sn, Subroutine {
+        parameters: vars,
+        block: block
+    })
+};
+
 pub Program: Program = {
-    <cs:CompoundStatement> "." => Program(cs),
+    <subs:Subroutine*> <cs:CompoundStatement> "." => Program {
+        subroutines: subs.iter().cloned().collect(),
+        entry: cs
+    }
 };

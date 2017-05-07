@@ -3,6 +3,9 @@ mod ast;
 mod eval;
 mod syntax; // lalrpop
 
+#[cfg(test)]
+use std::collections::HashMap;
+
 pub use eval::{Scope, evaluate_expression, evaluate_statement, evaluate_program};
 pub use syntax::{parse_Expression, parse_Statement, parse_Program};
 
@@ -110,19 +113,28 @@ END.\
 
 #[test]
 fn test_program() {
-    assert_eq!(parse_Program(programs::SIMPLE_ASSIGNMENT), Ok(Program(CompoundStatement(
-        StatementList::Sequence(
-            Statement::Assignment(Variable(String::from("a")), Box::new(Expression::Lit(Literal::Number(5)))),
-            Box::new(StatementList::Single(
-                Statement::Assignment(Variable(String::from("b")), Box::new(Expression::Var(Variable(String::from("a")))))
-            ))
+    assert_eq!(parse_Program(programs::SIMPLE_ASSIGNMENT), Ok(Program {
+        subroutines: HashMap::new(),
+        entry: CompoundStatement(
+            StatementList::Sequence(
+                Statement::Assignment(VariableName(String::from("a")), Box::new(Expression::Lit(Literal::Number(5)))),
+                Box::new(StatementList::Single(
+                    Statement::Assignment(VariableName(String::from("b")), Box::new(Expression::Var(VariableName(String::from("a")))))
+                ))
+            )
         )
-    ))));
+    }));
 }
 
 #[test]
 fn test_file_program() {
-    assert!(parse_Program(programs::file_program("examples/program.drebbel").as_str()).is_ok())
+//    assert_eq!(parse_Program(programs::file_program("examples/program.drebbel").as_str()), Ok(Program {
+//        subroutines: HashMap::new(),
+//        entry: CompoundStatement(
+//            StatementList::Single(Statement::Empty)
+//        )
+//    }))
+    assert!(parse_Program(programs::file_program("examples/program.drebbel").as_str()).is_ok());
 }
 
 #[test]

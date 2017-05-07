@@ -9,7 +9,7 @@ pub enum Value {
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Symbol {
-    Var(Variable)
+    Var(VariableName)
 }
 
 #[derive(Debug, PartialEq)]
@@ -27,7 +27,7 @@ impl Default for Scope {
 
 #[derive(Debug, PartialEq)]
 pub enum EvalError {
-    NotInScope(Variable)
+    NotInScope(VariableName)
 }
 
 pub fn evaluate_expression(scope: &Scope, expr: Expression) -> Result<Value, EvalError> {
@@ -69,36 +69,55 @@ pub fn evaluate_expression(scope: &Scope, expr: Expression) -> Result<Value, Eva
     }
 }
 
-pub fn evaluate_statement(scope: &mut Scope, stmt: Statement) -> Result<(), EvalError> {
+#[derive(Debug)]
+pub enum ControlFlow {
+    Continue,
+    Return(Option<Value>)
+}
+
+pub fn evaluate_statement(scope: &mut Scope, stmt: Statement) -> Result<ControlFlow, EvalError> {
     match stmt {
-        Statement::Empty => Ok(()),
+        Statement::Empty => Ok(ControlFlow::Continue),
         Statement::Assignment(var, expr) => {
             let val = evaluate_expression(scope, *expr)?;
             scope.symbol_table.insert(Symbol::Var(var.clone()), val.clone());
-            Ok(())
+            Ok(ControlFlow::Continue)
         }
-        Statement::Compound(compound_stmt) => evaluate_compound_statement(scope, *compound_stmt)
+        Statement::Return(return_expression) => {
+            match return_expression {
+                None => Ok(ControlFlow::Return(None)),
+                Some(expr) => {
+                    let val = evaluate_expression(scope, *expr)?;
+                    Ok(ControlFlow::Return(Some(val)))
+                }
+            }
+        }
     }
 }
 
-fn evaluate_statement_list(scope: &mut Scope, statement_list: StatementList) -> Result<(), EvalError> {
+fn evaluate_statement_list(scope: &mut Scope, statement_list: StatementList) -> Result<ControlFlow, EvalError> {
     match statement_list {
         StatementList::Single(stmt) => evaluate_statement(scope, stmt),
         StatementList::Sequence(stmt_head, stmt_tail) => {
-            evaluate_statement(scope, stmt_head)?;
-            evaluate_statement_list(scope, *stmt_tail)
+            let control_flow = evaluate_statement(scope, stmt_head)?;
+            match control_flow {
+                ControlFlow::Continue => evaluate_statement_list(scope, *stmt_tail),
+                ControlFlow::Return(_) => Ok(control_flow)
+            }
         }
     }
 }
 
-fn evaluate_compound_statement(scope: &mut Scope, compound_stmt: CompoundStatement) -> Result<(), EvalError> {
-    let CompoundStatement(statement_list) = compound_stmt;
-    evaluate_statement_list(scope, statement_list)
+fn evaluate_compound_statement(scope: &mut Scope, CompoundStatement(statement_list): CompoundStatement) -> Result<Option<Value>, EvalError> {
+    let result = evaluate_statement_list(scope, statement_list)?;
+    Ok(match result {
+        ControlFlow::Continue => None,
+        ControlFlow::Return(val) => val
+    })
 }
 
 pub fn evaluate_program(program: Program) -> Result<Scope, EvalError> {
     let mut global_scope = Scope::default();
-    let Program(compound_stmt) = program;
-    evaluate_compound_statement(&mut global_scope, compound_stmt)?;
+    evaluate_compound_statement(&mut global_scope, program.entry)?;
     Ok(global_scope)
 }

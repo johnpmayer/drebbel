@@ -1,45 +1,59 @@
 
-#[derive(Debug, PartialEq)]
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Number(i64)
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct Variable(pub String);
+pub struct VariableName(pub String);
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct SubroutineName(pub String);
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOperator {
     Minus
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InfixBinaryOperator {
     Add, Sub, Mul, Div, Mod
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
-    Var(Variable),
+    Var(VariableName),
     Lit(Literal),
     ApplyUnOp(UnaryOperator, Box<Expression>),
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
-    Assignment(Variable, Box<Expression>),
-    Compound(Box<CompoundStatement>),
+    Assignment(VariableName, Box<Expression>),
+    Return(Option<Box<Expression>>),
     Empty
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StatementList {
     Single(Statement),
     Sequence(Statement, Box<StatementList>)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CompoundStatement(pub StatementList);
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Subroutine {
+    pub parameters: Vec<VariableName>,
+    pub block: CompoundStatement
+}
+
 #[derive(Debug, PartialEq)]
-pub struct Program (pub CompoundStatement);
+pub struct Program {
+    pub subroutines: HashMap<SubroutineName, Subroutine>,
+    pub entry: CompoundStatement
+}
