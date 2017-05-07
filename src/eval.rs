@@ -50,7 +50,12 @@ pub fn evaluate_subroutine(subroutines: &HashMap<SubroutineName, Subroutine>,
         let mut subroutine_scope = Scope {
             symbol_table: sub.parameters.iter().cloned().zip(evaluated_arguments).collect()
         };
-        evaluate_compound_statement(subroutines, &mut subroutine_scope, &sub.block)
+        match sub.implementation {
+            Implementation::Block(ref compount_statement) =>
+                evaluate_compound_statement(subroutines, &mut subroutine_scope, compount_statement),
+            Implementation::Builtin(_) => panic!("Not Implemented: evaluating builtin subroutines")
+        }
+
     }
 }
 

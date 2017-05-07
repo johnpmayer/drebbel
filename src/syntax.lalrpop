@@ -108,7 +108,7 @@ CompoundStatement: CompoundStatement = {
 Subroutine: (SubroutineName, Subroutine) = {
     "SUB" <sn:SubroutineName> "(" <parameters:Comma<VariableName>> ")" <block:CompoundStatement> "." => (sn, Subroutine {
         parameters: parameters,
-        block: block
+        implementation: Implementation::Block(block)
     })
 };
 

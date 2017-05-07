@@ -50,9 +50,20 @@ pub enum StatementList {
 pub struct CompoundStatement(pub StatementList);
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum Builtin {
+    Print
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Implementation {
+    Builtin(Builtin),
+    Block(CompoundStatement)
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Subroutine {
     pub parameters: Vec<VariableName>,
-    pub block: CompoundStatement
+    pub implementation: Implementation
 }
 
 #[derive(Debug, PartialEq)]
