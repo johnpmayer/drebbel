@@ -102,7 +102,9 @@ StatementList: StatementList = {
 };
 
 CompoundStatement: CompoundStatement = {
-    "BEGIN" <sl:StatementList> "END" => CompoundStatement(sl),
+    "BEGIN" <sl:StatementList> "END" => CompoundStatement {
+        statement_list: sl
+    },
 };
 
 Subroutine: (SubroutineName, Subroutine) = {

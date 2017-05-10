@@ -63,6 +63,7 @@ pub fn evaluate_expression(subroutines: &HashMap<SubroutineName, Subroutine>,
                            scope: &mut Scope,
                            expr: &Expression) -> Result<Value, EvalError> {
     match expr {
+        &Expression::Lit(Literal::Boolean(b)) => Ok(Value::Boolean(b)),
         &Expression::Lit(Literal::Number(n)) => Ok(Value::Number(n)),
         &Expression::Var(ref var) => match scope.symbol_table.get(var) {
             None => Err(EvalError::NotInScope(var.clone())),
@@ -237,8 +238,7 @@ fn evaluate_statement_list(subroutines: &HashMap<SubroutineName, Subroutine>, sc
 }
 
 fn evaluate_compound_statement(subroutines: &HashMap<SubroutineName, Subroutine>, scope: &mut Scope, compound_statement: &CompoundStatement) -> Result<Option<Value>, EvalError> {
-    let &CompoundStatement(ref statement_list) = compound_statement;
-    let result = evaluate_statement_list(subroutines, scope, statement_list)?;
+    let result = evaluate_statement_list(subroutines, scope, &compound_statement.statement_list)?;
     Ok(match result {
         ControlFlow::Continue => None,
         ControlFlow::Return(val) => val

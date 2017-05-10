@@ -3,7 +3,8 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
-    Number(i64)
+    Number(i64),
+    Boolean(bool)
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -46,8 +47,39 @@ pub enum StatementList {
     Sequence(Statement, Box<StatementList>)
 }
 
+impl StatementList {
+    pub fn iter<'a>(&'a self) -> StatementListIter<'a> {
+        StatementListIter{
+            head: Some(&self)
+        }
+    }
+}
+
+pub struct StatementListIter<'a> {
+    head: Option<&'a StatementList>
+}
+
+impl<'a> Iterator for StatementListIter<'a> {
+    type Item = &'a Statement;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.head {
+            None => None,
+            Some(&StatementList::Single(ref stmt)) => {
+                self.head = None;
+                Some(stmt)
+            },
+            Some(&StatementList::Sequence(ref stmt, ref tail)) => {
+                self.head = Some(tail);
+                Some(stmt)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompoundStatement(pub StatementList);
+pub struct CompoundStatement {
+    pub statement_list: StatementList
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Builtin {

@@ -1,13 +1,15 @@
 
 mod ast;
-mod eval;
 mod syntax; // lalrpop
+mod eval;
+mod intermediate;
 
 #[cfg(test)]
 use std::collections::HashMap;
 
-pub use eval::{Scope, evaluate_expression, evaluate_statement, evaluate_program};
 pub use syntax::{parse_Expression, parse_Statement, parse_Program};
+pub use eval::{Scope, evaluate_expression, evaluate_statement, evaluate_program};
+pub use intermediate::{transform_compound_statement};
 
 #[cfg(test)]
 use self::ast::*;
@@ -123,14 +125,14 @@ END.\
 fn test_program() {
     assert_eq!(parse_Program(programs::SIMPLE_ASSIGNMENT), Ok(Program {
         subroutines: HashMap::new(),
-        entry: CompoundStatement(
-            StatementList::Sequence(
+        entry: CompoundStatement {
+            statement_list: StatementList::Sequence(
                 Statement::Assignment(VariableName(String::from("a")), Box::new(Expression::Lit(Literal::Number(5)))),
                 Box::new(StatementList::Single(
                     Statement::Assignment(VariableName(String::from("b")), Box::new(Expression::Var(VariableName(String::from("a")))))
                 ))
             )
-        )
+        }
     }));
 }
 
