@@ -4,10 +4,10 @@ extern crate linefeed;
 use linefeed::{Reader, ReadResult};
 use std::collections::HashMap;
 use drebbel::*;
+use std::env::args;
+use drebbel::ast::Implementation;
 
-fn main() {
-    println!("Hello, drebbel!");
-
+fn repl() {
     let empty_program = &HashMap::new();
 
     let mut reader = Reader::new("drebbel").unwrap();
@@ -34,4 +34,45 @@ fn main() {
     }
 
     println!("Goodbye.");
+}
+
+fn compile(filename: &str) {
+    let program = file_program(filename);
+
+    for (ref sub_name, ref subroutine) in program.subroutines.iter() {
+
+        match subroutine.implementation {
+            Implementation::Block(ref compound_statement) => {
+                println!("\n{:?}", sub_name);
+                let sub_instructions = transform_compound_statement(compound_statement);
+                for insn in sub_instructions {
+                    println!("{:?}", insn);
+                }
+            },
+            _ => ()
+        }
+
+    }
+
+    println!("\nMain");
+    let main_instructions = transform_compound_statement(&program.entry);
+    for insn in main_instructions {
+        println!("{:?}", insn);
+    }
+}
+
+fn main() {
+    let argv: Vec<String> = args().collect();
+
+    println!("Args: {:?}", argv);
+
+    let command = argv[1].as_str();
+    match command {
+        "repl" => repl(),
+        "compile" => {
+            let filename = argv[2].as_str();
+            compile(filename)
+        },
+        _ => panic!("Unknown command {}", command)
+    }
 }

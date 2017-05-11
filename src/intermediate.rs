@@ -128,7 +128,25 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
     }
 }
 
-pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> InstructionTree {
+fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<InstructionTree> {
+
+    let mut instructions: Vec<InstructionTree> = Vec::new();
+
+    for instruction in instruction_tree.into_iter() {
+        match instruction {
+            InstructionTree::Noop => (),
+            InstructionTree::CompoundInstruction(insns) => {
+                instructions.append(&mut flatten_instruction_tree(insns))
+            }
+            _ => instructions.push(instruction)
+        }
+    }
+
+    instructions
+
+}
+
+pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> Vec<InstructionTree> {
 
     let mut register_counter = 0;
     let mut instructions = Vec::new();
@@ -140,6 +158,7 @@ pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> I
         instructions.push(tree)
     }
 
-    InstructionTree::CompoundInstruction(instructions)
+    flatten_instruction_tree(instructions)
 
 }
+

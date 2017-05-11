@@ -1,8 +1,8 @@
 
-mod ast;
+pub mod ast;
 mod syntax; // lalrpop
-mod eval;
-mod intermediate;
+pub mod eval;
+pub mod intermediate;
 
 #[cfg(test)]
 use std::collections::HashMap;
@@ -95,11 +95,10 @@ fn test_expression_infix_assoc() {
 
 mod programs {
 
-    #[cfg(test)]
+    use syntax::parse_Program;
+    use ast::Program;
     use std::fs::File;
-    #[cfg(test)]
     use std::io::prelude::*;
-    #[cfg(test)]
     use std::path::Path;
 
     #[cfg(test)]
@@ -110,16 +109,20 @@ BEGIN \
 END.\
     ";
 
-    #[cfg(test)]
-    pub fn file_program(path: &str) -> String {
+    pub fn file_program(path: &str) -> Program {
         let path = Path::new(path);
         let mut file = File::open(&path).unwrap();
         let mut source = String::new();
         let _ = file.read_to_string(&mut source);
-        source
+        match parse_Program(source.as_str()) {
+            Ok(program) => program,
+            Err(err) => panic!("{:?}", err)
+        }
     }
 
 }
+
+pub use programs::file_program;
 
 #[test]
 fn test_program() {
@@ -138,10 +141,8 @@ fn test_program() {
 
 #[cfg(test)]
 fn assert_example_program(program_name: &str) {
-    let program_source = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
-    let file_program = parse_Program(program_source.as_str());
-    assert_ok(&file_program);
-    let result_scope = evaluate_program(file_program.unwrap());
+    let program = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
+    let result_scope = evaluate_program(program);
     assert_ok(&result_scope);
     println!("{:?}", result_scope.unwrap())
 }
