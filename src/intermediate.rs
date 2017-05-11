@@ -128,24 +128,6 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
     }
 }
 
-fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<InstructionTree> {
-
-    let mut instructions: Vec<InstructionTree> = Vec::new();
-
-    for instruction in instruction_tree.into_iter() {
-        match instruction {
-            InstructionTree::Noop => (),
-            InstructionTree::CompoundInstruction(insns) => {
-                instructions.append(&mut flatten_instruction_tree(insns))
-            }
-            _ => instructions.push(instruction)
-        }
-    }
-
-    instructions
-
-}
-
 pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> Vec<InstructionTree> {
 
     let mut register_counter = 0;
@@ -158,7 +140,61 @@ pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> V
         instructions.push(tree)
     }
 
-    flatten_instruction_tree(instructions)
+    instructions
 
 }
 
+#[derive(Debug)]
+pub enum Instruction {
+    Assign(AssignTarget, ValueTarget),
+    ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
+    ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
+    ConditionalJumpRelative(ValueTarget, usize),
+    CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
+    Return(Option<ValueTarget>)
+}
+
+pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<Instruction> {
+
+    let mut instructions: Vec<Instruction> = Vec::new();
+
+    for instruction in instruction_tree.into_iter() {
+        match instruction {
+            InstructionTree::Noop => (),
+
+            InstructionTree::Assign(tgt, val) =>
+                instructions.push(Instruction::Assign(tgt, val)),
+            InstructionTree::ApplyUnOp(tgt, op, val) =>
+                instructions.push(Instruction::ApplyUnOp(tgt, op, val)),
+            InstructionTree::ApplyBinOp(tgt, l_val, op, r_val) =>
+                instructions.push(Instruction::ApplyBinOp(tgt, l_val, op, r_val)),
+
+            InstructionTree::Conditional(test_val, truthy_tree, falsey_tree) => {
+                let mut truthy_insns = flatten_instruction_tree(vec!(*truthy_tree));
+                let mut falsey_insns = flatten_instruction_tree(vec!(*falsey_tree));
+                let truthy_jump_distance = truthy_insns.len();
+                let falsey_jump_distance = falsey_insns.len();
+                // If true, jump past the falsey code + the insn which always jumps past the truthy code
+                instructions.push(Instruction::ConditionalJumpRelative(test_val, falsey_jump_distance + 2));
+                // Execute the falsey code
+                instructions.append(&mut falsey_insns);
+                // Always jump past the truthy code
+                instructions.push(Instruction::ConditionalJumpRelative(ValueTarget::Literal(Literal::Boolean(true)), truthy_jump_distance + 1));
+                // Execute the truthy code
+                instructions.append(&mut truthy_insns);
+                // Continue program execution
+            }
+
+            InstructionTree::CompoundInstruction(insns) =>
+                instructions.append(&mut flatten_instruction_tree(insns)),
+            InstructionTree::CallSubroutine(tgt, sub_name, args) =>
+                instructions.push(Instruction::CallSubroutine(tgt, sub_name, args)),
+            InstructionTree::Return(val) =>
+                instructions.push(Instruction::Return(val))
+
+        }
+    }
+
+    instructions
+
+}

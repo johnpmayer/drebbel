@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 pub use syntax::{parse_Expression, parse_Statement, parse_Program};
 pub use eval::{Scope, evaluate_expression, evaluate_statement, evaluate_program};
-pub use intermediate::{transform_compound_statement};
+pub use intermediate::{transform_compound_statement, flatten_instruction_tree};
 
 #[cfg(test)]
 use self::ast::*;

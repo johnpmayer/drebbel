@@ -44,7 +44,7 @@ fn compile(filename: &str) {
         match subroutine.implementation {
             Implementation::Block(ref compound_statement) => {
                 println!("\n{:?}", sub_name);
-                let sub_instructions = transform_compound_statement(compound_statement);
+                let sub_instructions = flatten_instruction_tree(transform_compound_statement(compound_statement));
                 for insn in sub_instructions {
                     println!("{:?}", insn);
                 }
@@ -55,7 +55,7 @@ fn compile(filename: &str) {
     }
 
     println!("\nMain");
-    let main_instructions = transform_compound_statement(&program.entry);
+    let main_instructions = flatten_instruction_tree(transform_compound_statement(&program.entry));
     for insn in main_instructions {
         println!("{:?}", insn);
     }
