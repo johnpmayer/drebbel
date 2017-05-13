@@ -94,7 +94,7 @@ pub enum Implementation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Subroutine {
-    pub parameters: Vec<VariableName>,
+    pub arguments: Vec<VariableName>,
     pub implementation: Implementation
 }
 

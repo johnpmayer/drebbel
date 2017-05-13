@@ -61,6 +61,11 @@ fn compile(filename: &str) {
     }
 }
 
+fn exec(filename: &str) {
+    let program = file_program(filename);
+    exec::execute_program(&program);
+}
+
 fn main() {
     let argv: Vec<String> = args().collect();
 
@@ -73,6 +78,10 @@ fn main() {
             let filename = argv[2].as_str();
             compile(filename)
         },
+        "exec" => {
+            let filename = argv[2].as_str();
+            exec(filename)
+        }
         _ => panic!("Unknown command {}", command)
     }
 }

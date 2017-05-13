@@ -3,6 +3,7 @@ pub mod ast;
 mod syntax; // lalrpop
 pub mod eval;
 pub mod intermediate;
+pub mod exec;
 
 #[cfg(test)]
 use std::collections::HashMap;

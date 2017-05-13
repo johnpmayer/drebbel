@@ -8,11 +8,6 @@ pub enum Value {
     Boolean(bool)
 }
 
-//#[derive(Debug, Hash, PartialEq, Eq)]
-//pub enum Symbol {
-//    Var(VariableName)
-//}
-
 #[derive(Debug, PartialEq)]
 pub struct Scope {
     symbol_table: HashMap<VariableName, Value>
@@ -40,15 +35,15 @@ pub fn evaluate_subroutine(subroutines: &HashMap<SubroutineName, Subroutine>,
                            sub_name: &SubroutineName,
                            sub: &Subroutine,
                            arguments: &Vec<Box<Expression>>) -> Result<Option<Value>, EvalError> {
-    if sub.parameters.len() != arguments.len() {
-        Err(EvalError::WrongNumberOfArguments(sub_name.clone(), sub.parameters.len(), arguments.len()))
+    if sub.arguments.len() != arguments.len() {
+        Err(EvalError::WrongNumberOfArguments(sub_name.clone(), sub.arguments.len(), arguments.len()))
     } else {
         let evaluated_arguments: Result<Vec<Value>, EvalError> = arguments.iter().map(|argument| {
             evaluate_expression(subroutines, scope, argument)
         }).collect();
         let evaluated_arguments = evaluated_arguments?;
         let mut subroutine_scope = Scope {
-            symbol_table: sub.parameters.iter().cloned().zip(evaluated_arguments).collect()
+            symbol_table: sub.arguments.iter().cloned().zip(evaluated_arguments).collect()
         };
         match sub.implementation {
             Implementation::Block(ref compount_statement) =>

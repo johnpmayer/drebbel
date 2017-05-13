@@ -11,7 +11,7 @@ pub enum ValueTarget {
     Variable(VariableName)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AssignTarget {
     Register(RegisterName),
     Variable(VariableName)
@@ -144,7 +144,7 @@ pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> V
 
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Instruction {
     Assign(AssignTarget, ValueTarget),
     ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
@@ -197,4 +197,10 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
 
     instructions
 
+}
+
+pub fn jit(block: &CompoundStatement) -> Vec<Instruction> {
+    let tree = transform_compound_statement(block);
+    let instructions = flatten_instruction_tree(tree);
+    instructions
 }
