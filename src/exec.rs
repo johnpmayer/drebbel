@@ -33,6 +33,7 @@ pub enum ExecutionError {
     NotInScope(AssignTarget),
     UnknownSubroutine(SubroutineName),
     TypeError(String),
+    JumpOutOfBounds,
 }
 
 fn lookup_value(scope: &HashMap<AssignTarget, Value>, target: &AssignTarget) -> Result<Value, ExecutionError> {
@@ -105,6 +106,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     (&Value::Boolean(l), &InfixBinaryOperator::And, &Value::Boolean(r)) => Value::Boolean(l && r),
                     (&Value::Boolean(l), &InfixBinaryOperator::Or, &Value::Boolean(r)) => Value::Boolean(l || r),
                     (&Value::Number(l), &InfixBinaryOperator::Eq, &Value::Number(r)) => Value::Boolean(l == r),
+                    (&Value::Number(l), &InfixBinaryOperator::Lt, &Value::Number(r)) => Value::Boolean(l < r),
                     _ => return Err(ExecutionError::TypeError(format!("Can't apply {:?} to {:?} and {:?}", l_value, op, r_value)))
                 };
                 frame.scope.insert(assign_tgt.clone(), result);
@@ -130,7 +132,11 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     v => return Err(ExecutionError::TypeError(format!("Can't use {:?} for conditional", v)))
                 };
                 if test_value {
-                    frame.program_counter += offset;
+                    let new_counter = (frame.program_counter as isize) + offset;
+                    if new_counter < 0 {
+                        return Err(ExecutionError::JumpOutOfBounds);
+                    }
+                    frame.program_counter = new_counter as usize;
                     continue;
                 }
             },

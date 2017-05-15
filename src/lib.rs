@@ -1,7 +1,6 @@
 
 pub mod ast;
 mod syntax; // lalrpop
-pub mod eval;
 pub mod intermediate;
 pub mod exec;
 
@@ -9,14 +8,10 @@ pub mod exec;
 use std::collections::HashMap;
 
 pub use syntax::{parse_Expression, parse_Statement, parse_Program};
-pub use eval::{Scope, evaluate_expression, evaluate_statement, evaluate_program};
 pub use intermediate::{transform_compound_statement, flatten_instruction_tree};
 
 #[cfg(test)]
 use self::ast::*;
-
-#[cfg(test)]
-use self::eval::Value;
 
 #[cfg(test)]
 fn assert_ok<T, E>(r: &Result<T, E>) where E: std::fmt::Debug {
@@ -110,20 +105,34 @@ BEGIN \
 END.\
     ";
 
-    pub fn file_program(path: &str) -> Program {
+    pub fn file_program(path: &str) -> Result<Program, String> {
         let path = Path::new(path);
         let mut file = File::open(&path).unwrap();
         let mut source = String::new();
         let _ = file.read_to_string(&mut source);
         match parse_Program(source.as_str()) {
-            Ok(program) => program,
-            Err(err) => panic!("{:?}", err)
+            Ok(program) => Ok(program),
+            Err(err) => Err(format!("Error parsing program: {:?}", err))
         }
     }
 
 }
 
 pub use programs::file_program;
+
+#[cfg(test)]
+fn assert_example_program(program_name: &str) {
+    let program = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
+    assert_ok(&program)
+}
+
+#[test]
+fn test_file_programs() {
+    assert_example_program("program");
+    assert_example_program("recursion");
+    assert_example_program("loop");
+}
+
 
 #[test]
 fn test_program() {
@@ -139,27 +148,3 @@ fn test_program() {
         }
     }));
 }
-
-#[cfg(test)]
-fn assert_example_program(program_name: &str) {
-    let program = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
-    let result_scope = evaluate_program(program);
-    assert_ok(&result_scope);
-    println!("{:?}", result_scope.unwrap())
-}
-
-#[test]
-fn test_file_programs() {
-    assert_example_program("program");
-    assert_example_program("recursion");
-}
-
-#[test]
-fn test_evaluate_literal() {
-    let empty_program = &HashMap::new();
-    let mut empty_scope = Scope::default();
-    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("1234").unwrap()), Ok(Value::Number(1234)));
-    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("1234 + 5678").unwrap()), Ok(Value::Number(6912)));
-    assert_eq!(evaluate_expression(empty_program, &mut empty_scope, &*parse_Expression("(123 + 456) - 789").unwrap()), Ok(Value::Number(-210)));
-}
-

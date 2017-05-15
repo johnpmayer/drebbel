@@ -1,43 +1,12 @@
 extern crate drebbel;
 extern crate linefeed;
 
-use linefeed::{Reader, ReadResult};
-use std::collections::HashMap;
 use drebbel::*;
 use std::env::args;
 use drebbel::ast::{Implementation, Builtin, SubroutineName, Subroutine, VariableName};
 
-fn repl() {
-    let empty_program = &HashMap::new();
-
-    let mut reader = Reader::new("drebbel").unwrap();
-
-    let mut repl_scope = drebbel::Scope::default();
-
-    reader.set_prompt("drebbel> ");
-
-    while let Ok(ReadResult::Input(input)) = reader.read_line() {
-        println!("got input {:?}", input);
-
-        if let Ok(expr) = parse_Expression(input.as_str()) {
-            println!("Got expression {:?}", expr);
-            let value = evaluate_expression(empty_program, &mut repl_scope, &*expr);
-            println!("Evaluates to {:?}", value)
-        } else if let Ok(stmt) = parse_Statement(input.as_str()) {
-            println!("Got statement {:?}", stmt);
-            let result = evaluate_statement(empty_program, &mut repl_scope, &stmt);
-            println!("{:?}", result)
-        } else {
-            println!("Syntax error")
-        }
-
-    }
-
-    println!("Goodbye.");
-}
-
 fn compile(filename: &str) {
-    let program = file_program(filename);
+    let program = file_program(filename).unwrap();
 
     for (ref sub_name, ref subroutine) in program.subroutines.iter() {
 
@@ -62,7 +31,7 @@ fn compile(filename: &str) {
 }
 
 fn exec(filename: &str) {
-    let mut program = file_program(filename);
+    let mut program = file_program(filename).unwrap();
 
     program.subroutines.insert(SubroutineName(String::from("print")), Subroutine{
         arguments: vec!(VariableName(String::from("value"))),
@@ -82,7 +51,6 @@ fn main() {
 
     let command = argv[1].as_str();
     match command {
-        "repl" => repl(),
         "compile" => {
             let filename = argv[2].as_str();
             compile(filename)

@@ -26,7 +26,8 @@ pub enum InstructionTree {
     Conditional(ValueTarget, Box<InstructionTree>, Box<InstructionTree>),
     CompoundInstruction(Vec<InstructionTree>),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
-    Return(Option<ValueTarget>)
+    Return(Option<ValueTarget>),
+    Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>)
 }
 
 fn next_register(register_counter: &mut i64) -> RegisterName {
@@ -36,7 +37,7 @@ fn next_register(register_counter: &mut i64) -> RegisterName {
 }
 
 fn transform_expression(register_counter: &mut i64,
-                            expression: &Expression) -> (ValueTarget, InstructionTree) {
+                        expression: &Expression) -> (ValueTarget, InstructionTree) {
     match expression {
         &Expression::Lit(ref lit) => (ValueTarget::Literal(lit.clone()), InstructionTree::Noop),
         &Expression::Var(ref var) => (ValueTarget::Variable(var.clone()), InstructionTree::Noop),
@@ -97,7 +98,7 @@ fn transform_expression(register_counter: &mut i64,
                                                               argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
             (ValueTarget::Register(result_register), tree)
-        }
+        },
     }
 }
 
@@ -114,33 +115,45 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
         &Statement::EvaluateIgnore(ref expression) => {
             let (_, tree) = transform_expression(register_counter, expression);
             tree
-        }
+        },
         &Statement::Return(None) => {
             InstructionTree::Return(None)
-        }
+        },
         &Statement::Return(Some(ref expression)) => {
             let (value, tree) = transform_expression(register_counter, expression);
             InstructionTree::CompoundInstruction(
                 vec!( tree
                     , InstructionTree::Return(Some(value)))
             )
+        },
+        &Statement::Loop(ref test_expression, ref block) => {
+            let (test_value_target, test_tree) = transform_expression(register_counter, test_expression);
+            let body_trees = transform_statement_list(register_counter, block);
+            InstructionTree::Loop(Box::new(test_tree),
+                                  test_value_target,
+                                  body_trees)
         }
     }
+}
+
+fn transform_statement_list(register_counter: &mut i64, statement_list: &StatementList) -> Vec<InstructionTree> {
+
+    let mut instructions = Vec::new();
+    let mut statments = statement_list.iter();
+
+    while let Some(ref stmt) = statments.next() {
+        let tree = transform_statement(register_counter, stmt);
+        instructions.push(tree)
+    }
+
+    instructions
+
 }
 
 pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> Vec<InstructionTree> {
 
     let mut register_counter = 0;
-    let mut instructions = Vec::new();
-
-    let mut statments = compound_statement.statement_list.iter();
-
-    while let Some(ref stmt) = statments.next() {
-        let tree = transform_statement(&mut register_counter, stmt);
-        instructions.push(tree)
-    }
-
-    instructions
+    transform_statement_list(&mut register_counter, &compound_statement.statement_list)
 
 }
 
@@ -149,10 +162,12 @@ pub enum Instruction {
     Assign(AssignTarget, ValueTarget),
     ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
     ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
-    ConditionalJumpRelative(ValueTarget, usize),
+    ConditionalJumpRelative(ValueTarget, isize),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>)
 }
+
+const ALWAYS: ValueTarget = ValueTarget::Literal(Literal::Boolean(true));
 
 pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<Instruction> {
 
@@ -170,18 +185,34 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
                 instructions.push(Instruction::ApplyBinOp(tgt, l_val, op, r_val)),
 
             InstructionTree::Conditional(test_val, truthy_tree, falsey_tree) => {
-                let mut truthy_insns = flatten_instruction_tree(vec!(*truthy_tree));
                 let mut falsey_insns = flatten_instruction_tree(vec!(*falsey_tree));
-                let truthy_jump_distance = truthy_insns.len();
-                let falsey_jump_distance = falsey_insns.len();
+                let falsey_jump_distance = (falsey_insns.len() as isize) + 2;
                 // If true, jump past the falsey code + the insn which always jumps past the truthy code
-                instructions.push(Instruction::ConditionalJumpRelative(test_val, falsey_jump_distance + 2));
+                instructions.push(Instruction::ConditionalJumpRelative(test_val, falsey_jump_distance));
                 // Execute the falsey code
                 instructions.append(&mut falsey_insns);
+                let mut truthy_insns = flatten_instruction_tree(vec!(*truthy_tree));
+                let truthy_jump_distance = (truthy_insns.len() as isize) + 1;
                 // Always jump past the truthy code
-                instructions.push(Instruction::ConditionalJumpRelative(ValueTarget::Literal(Literal::Boolean(true)), truthy_jump_distance + 1));
+                instructions.push(Instruction::ConditionalJumpRelative(ALWAYS, truthy_jump_distance));
                 // Execute the truthy code
                 instructions.append(&mut truthy_insns);
+                // Continue program execution
+            }
+
+            InstructionTree::Loop(test_tree, test_val, body_trees) => {
+                let mut body_insns = flatten_instruction_tree(body_trees);
+                let body_jump_distance = body_insns.len() as isize;
+                // Initially, jump past the body
+                instructions.push(Instruction::ConditionalJumpRelative(ALWAYS, body_jump_distance + 1));
+                // Execute the body
+                instructions.append(&mut body_insns);
+                let mut test_insns = flatten_instruction_tree(vec!(*test_tree));
+                let while_jump_distance = - (body_jump_distance + (test_insns.len() as isize));
+                // Execute the test code
+                instructions.append(&mut test_insns);
+                // If true, jump backwards to the start of the body, otherwise break
+                instructions.push(Instruction::ConditionalJumpRelative(test_val, while_jump_distance));
                 // Continue program execution
             }
 

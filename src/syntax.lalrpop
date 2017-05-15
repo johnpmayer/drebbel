@@ -73,6 +73,7 @@ Expression3: Box<Expression> = {
 
 BinaryOp4: InfixBinaryOperator = {
     "==" => InfixBinaryOperator::Eq,
+    "<" => InfixBinaryOperator::Lt,
 };
 
 Expression4: Box<Expression> = {
@@ -90,9 +91,10 @@ Expression5: Box<Expression> = {
 pub Expression: Box<Expression> = Expression5;
 
 pub Statement: Statement = {
-    CallSubroutine => Statement::EvaluateIgnore(<>),
+    Expression => Statement::EvaluateIgnore(<>),
     <v:VariableName> ":=" <expr:Expression> => Statement::Assignment(v, expr),
     "RETURN" <expr:Expression?> => Statement::Return(expr),
+    Loop,
     => Statement::Empty,
 };
 
@@ -105,6 +107,11 @@ CompoundStatement: CompoundStatement = {
     "BEGIN" <sl:StatementList> "END" => CompoundStatement {
         statement_list: sl
     },
+};
+
+Loop: Statement = {
+    "WHILE" <test_expr:Expression> "DO" <sl:StatementList> "DONE" =>
+        Statement::Loop(test_expr, Box::new(sl)),
 };
 
 Subroutine: (SubroutineName, Subroutine) = {
