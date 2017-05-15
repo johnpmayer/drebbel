@@ -6,5 +6,6 @@ BEGIN
 END.
 
 BEGIN
-  result := fib(3)
+  result := fib(11);
+  print(result)
 END.

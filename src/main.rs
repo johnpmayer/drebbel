@@ -5,7 +5,7 @@ use linefeed::{Reader, ReadResult};
 use std::collections::HashMap;
 use drebbel::*;
 use std::env::args;
-use drebbel::ast::Implementation;
+use drebbel::ast::{Implementation, Builtin, SubroutineName, Subroutine, VariableName};
 
 fn repl() {
     let empty_program = &HashMap::new();
@@ -62,8 +62,17 @@ fn compile(filename: &str) {
 }
 
 fn exec(filename: &str) {
-    let program = file_program(filename);
-    exec::execute_program(&program);
+    let mut program = file_program(filename);
+
+    program.subroutines.insert(SubroutineName(String::from("print")), Subroutine{
+        arguments: vec!(VariableName(String::from("value"))),
+        implementation: Implementation::Builtin(Builtin::Print)
+    });
+
+    match exec::execute_program(&program) {
+        Ok(()) => println!("Program terminated cleanly"),
+        Err(err) => println!("Program crashed with error {:?}", err)
+    }
 }
 
 fn main() {

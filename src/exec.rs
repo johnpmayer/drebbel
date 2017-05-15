@@ -2,7 +2,6 @@
 use ast::*;
 use intermediate::*;
 use std::collections::HashMap;
-use std::ops::DerefMut;
 
 #[derive(Clone, Debug)]
 enum Value {
@@ -29,10 +28,11 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
 pub enum ExecutionError {
     NotInScope(AssignTarget),
     UnknownSubroutine(SubroutineName),
-    TypeError(String)
+    TypeError(String),
 }
 
 fn lookup_value(scope: &HashMap<AssignTarget, Value>, target: &AssignTarget) -> Result<Value, ExecutionError> {
@@ -51,12 +51,24 @@ fn get_value(scope: &HashMap<AssignTarget, Value>, target: &ValueTarget) -> Resu
     }
 }
 
+fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
+    match *builtin {
+        Builtin::Print => {
+            for arg in arguments {
+                println!("--> {:?}", arg);
+            }
+            Ok(Value::Unit)
+        }
+    }
+}
 
 pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
 
     let mut frame = Frame::new(jit(&program.entry));
 
-    while true {
+    let mut subroutine_instruction_cache: HashMap<SubroutineName, Vec<Instruction>> = HashMap::new();
+
+    loop {
 
         let instruction = if frame.program_counter >= frame.instructions.len() {
             // Implicit return if we've reached the end of what to do
@@ -65,7 +77,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             frame.instructions[frame.program_counter].clone()
         };
 
-        println!("Executing instruciton {:?}", instruction);
+        println!("### Executing instruction {:?}", instruction);
 
         match instruction {
             Instruction::Assign(ref assign_tgt, ref value_tgt) => {
@@ -104,10 +116,9 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 };
                 match frame.parent {
                     None => {
-                        // TODO: support integer exit codes for main?
                         break;
                     },
-                    Some((assign_tgt, mut parent_frame)) => {
+                    Some((assign_tgt, parent_frame)) => {
                         frame = *parent_frame;
                         frame.scope.insert(assign_tgt.clone(), value);
                     }
@@ -131,11 +142,31 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 match program.subroutines.get(sub_name) {
                     None => return Err(ExecutionError::UnknownSubroutine(sub_name.clone())),
                     Some(ref subroutine) => {
-                        let subroutine_scope = subroutine.arguments.iter().map(|arg_name| {
-                            AssignTarget::Variable(arg_name.clone())
-                        }).zip(argument_values?);
 
-                        panic!("TODO push new stack frame")
+                        let argument_values: Vec<Value> = argument_values?;
+
+                        match subroutine.implementation {
+                            Implementation::Builtin(ref builtin) => {
+                                let value = execute_builtin(builtin, argument_values)?;
+                                frame.scope.insert(assign_tgt.clone(), value);
+                            }
+                            Implementation::Block(ref compound_statement) => {
+                                let subroutine_scope: HashMap<AssignTarget, Value> = subroutine.arguments.iter().map(|arg_name| {
+                                    AssignTarget::Variable(arg_name.clone())
+                                }).zip(argument_values).collect();
+                                let subroutine_instructions = subroutine_instruction_cache.entry(sub_name.clone()).or_insert({
+                                    jit(compound_statement)
+                                }).clone();
+                                let subroutine_frame = Frame {
+                                    parent: Some((assign_tgt.clone(), Box::new(frame))),
+                                    instructions: subroutine_instructions,
+                                    program_counter: 0,
+                                    scope: subroutine_scope,
+                                };
+                                frame = subroutine_frame;
+                                continue;
+                            }
+                        };
                     }
                 }
             }
@@ -143,6 +174,10 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
 
         frame.program_counter += 1;
 
+    }
+
+    for (target, value) in frame.scope.iter() {
+        println!("### Final value of {:?} = {:?}", target, value)
     }
 
     Ok(())
