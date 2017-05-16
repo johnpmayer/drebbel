@@ -99,6 +99,7 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(instructions);
             (ValueTarget::Register(result_register), tree)
         },
+        _ => panic!("TODO Cont"),
     }
 }
 
@@ -132,7 +133,8 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
             InstructionTree::Loop(Box::new(test_tree),
                                   test_value_target,
                                   body_trees)
-        }
+        },
+        _ => panic!("TODO Cont"),
     }
 }
 

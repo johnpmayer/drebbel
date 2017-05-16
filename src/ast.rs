@@ -13,6 +13,9 @@ pub struct VariableName(pub String);
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct SubroutineName(pub String);
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct Symbol(pub String);
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOperator {
     Minus, Not,
@@ -31,6 +34,9 @@ pub enum Expression {
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
     CallSubByValue(SubroutineName, Vec<Box<Expression>>),
     Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
+    MakeCont(Symbol, SubroutineName, Vec<Box<Expression>>),
+    RunCont(Box<Expression>),
+    IsDoneCont(Box<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,6 +45,7 @@ pub enum Statement {
     Assignment(VariableName, Box<Expression>),
     Return(Option<Box<Expression>>),
     Loop(Box<Expression>, Box<StatementList>),
+    SuspendCont(Symbol, Option<Box<Expression>>),
     Empty,
 }
 
