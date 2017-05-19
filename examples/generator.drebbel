@@ -1,0 +1,16 @@
+SUB range (n)
+BEGIN
+  a := 0;
+  WHILE a < n DO
+    SUSPEND gen a;
+    a := a + 1
+  DONE
+END.
+
+BEGIN
+  gen := CONT gen range(5);
+  WHILE ! (ISDONE gen) DO
+    x := RUN gen;
+    print(x)
+  DONE
+END.

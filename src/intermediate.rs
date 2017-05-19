@@ -27,7 +27,11 @@ pub enum InstructionTree {
     CompoundInstruction(Vec<InstructionTree>),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
-    Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>)
+    Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>),
+    MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
+    RunCont(Box<InstructionTree>),
+    IsDoneCont(Box<InstructionTree>),
+    SuspendCont(Symbol, Option<ValueTarget>),
 }
 
 fn next_register(register_counter: &mut i64) -> RegisterName {
@@ -99,7 +103,30 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(instructions);
             (ValueTarget::Register(result_register), tree)
         },
-        _ => panic!("TODO Cont"),
+        &Expression::MakeCont(ref symbol, ref sub_name, ref arguments) => {
+            // TODO un-DRY with the CallSubByValue. just arguments -> instructions
+            let mut instructions = Vec::new();
+            let mut argument_values = Vec::new();
+            for ref arg_expr in arguments {
+                let (arg_value, arg_tree) = transform_expression(register_counter, arg_expr);
+                instructions.push(arg_tree);
+                argument_values.push(arg_value.clone())
+            }
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            instructions.push(InstructionTree::MakeCont(result_target,
+                                                        symbol.clone(),
+                                                        sub_name.clone(),
+                                                        argument_values));
+            let tree = InstructionTree::CompoundInstruction(instructions);
+            (ValueTarget::Register(result_register), tree)
+        },
+        &Expression::RunCont(ref expr) => {
+            panic!("TODO RunCont")
+        },
+        &Expression::IsDoneCont(ref expr) => {
+            panic!("TODO IsDoneCont")
+        },
     }
 }
 
@@ -134,7 +161,12 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
                                   test_value_target,
                                   body_trees)
         },
-        _ => panic!("TODO Cont"),
+        &Statement::SuspendCont(ref symbol, None) => {
+            panic!("TODO Suspend")
+        },
+        &Statement::SuspendCont(ref symbol, Some(ref expression)) => {
+            panic!("TODO Suspend with value")
+        },
     }
 }
 

@@ -131,6 +131,7 @@ fn test_file_programs() {
     assert_example_program("program");
     assert_example_program("recursion");
     assert_example_program("loop");
+    assert_example_program("generator");
 }
 
 
