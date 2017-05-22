@@ -29,8 +29,8 @@ pub enum InstructionTree {
     Return(Option<ValueTarget>),
     Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>),
     MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
-    RunCont(Box<InstructionTree>),
-    IsDoneCont(Box<InstructionTree>),
+    RunCont(AssignTarget, ValueTarget),
+    IsDoneCont(AssignTarget, ValueTarget),
     SuspendCont(Symbol, Option<ValueTarget>),
 }
 
@@ -122,10 +122,23 @@ fn transform_expression(register_counter: &mut i64,
             (ValueTarget::Register(result_register), tree)
         },
         &Expression::RunCont(ref expr) => {
-            panic!("TODO RunCont")
+            let (expr_value, expr_tree) = transform_expression(register_counter, expr);
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            let tree = InstructionTree::CompoundInstruction(
+                vec!( expr_tree
+                    , InstructionTree::RunCont(result_target, expr_value))
+            );
+            (ValueTarget::Register(result_register), tree)
         },
         &Expression::IsDoneCont(ref expr) => {
-            panic!("TODO IsDoneCont")
+            let (expr_value, expr_tree) = transform_expression(register_counter, expr);
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            let tree = InstructionTree::CompoundInstruction(
+                vec!( expr_tree
+                    , InstructionTree::IsDoneCont(result_target, expr_value)));
+            (ValueTarget::Register(result_register), tree)
         },
     }
 }
@@ -162,10 +175,15 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
                                   body_trees)
         },
         &Statement::SuspendCont(ref symbol, None) => {
-            panic!("TODO Suspend")
+            InstructionTree::SuspendCont(symbol.clone(), None)
         },
         &Statement::SuspendCont(ref symbol, Some(ref expression)) => {
-            panic!("TODO Suspend with value")
+            let (expr_value, expr_tree) = transform_expression(register_counter, expression);
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            InstructionTree::CompoundInstruction(
+                vec!( expr_tree
+                    , InstructionTree::SuspendCont(symbol.clone(), Some(expr_value))))
         },
     }
 }
@@ -198,7 +216,11 @@ pub enum Instruction {
     ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
     ConditionalJumpRelative(ValueTarget, isize),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
-    Return(Option<ValueTarget>)
+    Return(Option<ValueTarget>),
+    MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
+    RunCont(AssignTarget, ValueTarget),
+    IsDoneCont(AssignTarget, ValueTarget),
+    SuspendCont(Symbol, Option<ValueTarget>),
 }
 
 const ALWAYS: ValueTarget = ValueTarget::Literal(Literal::Boolean(true));
@@ -255,7 +277,16 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
             InstructionTree::CallSubroutine(tgt, sub_name, args) =>
                 instructions.push(Instruction::CallSubroutine(tgt, sub_name, args)),
             InstructionTree::Return(val) =>
-                instructions.push(Instruction::Return(val))
+                instructions.push(Instruction::Return(val)),
+
+            InstructionTree::MakeCont(tgt, symbol, sub_name, args) =>
+                instructions.push(Instruction::MakeCont(tgt, symbol, sub_name, args)),
+            InstructionTree::RunCont(tgt, val) =>
+                instructions.push(Instruction::RunCont(tgt, val)),
+            InstructionTree::IsDoneCont(tgt, val) =>
+                instructions.push(Instruction::IsDoneCont(tgt, val)),
+            InstructionTree::SuspendCont(symbol, opt_val) =>
+                instructions.push(Instruction::SuspendCont(symbol, opt_val)),
 
         }
     }
