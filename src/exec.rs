@@ -1,29 +1,50 @@
 
 use ast::*;
 use intermediate::*;
+use std::rc::Rc;
+use std::cell::Cell;
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 enum Value {
     Unit,
     Number(i64),
-    Boolean(bool)
+    Boolean(bool),
+    Cont(Continuation),
 }
 
+#[derive(Clone)]
+struct Continuation {
+    symbol: Symbol,
+    frame: Rc<Cell<Frame>>,
+    // frame: Frame,
+}
+
+impl Debug for Continuation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Continuation({:?})", self.symbol)
+    }
+}
+
+#[derive(Clone)]
 struct Frame {
     parent: Option<(AssignTarget, Box<Frame>)>,
+    continuation: Option<Symbol>,
     instructions: Vec<Instruction>,
     program_counter: usize,
-    scope: HashMap<AssignTarget, Value>
+    scope: HashMap<AssignTarget, Value>,
 }
 
 impl Frame {
     fn new(instructions: Vec<Instruction>) -> Self {
         Frame {
             parent: None,
+            continuation: None,
             instructions: instructions,
             program_counter: 0,
-            scope: HashMap::new()
+            scope: HashMap::new(),
         }
     }
 }
@@ -39,7 +60,7 @@ pub enum ExecutionError {
 fn lookup_value(scope: &HashMap<AssignTarget, Value>, target: &AssignTarget) -> Result<Value, ExecutionError> {
     match scope.get(target) {
         None => Err(ExecutionError::NotInScope(target.clone())),
-        Some(value) => Ok(value.clone())
+        Some(value) => Ok(value.clone()),
     }
 }
 
@@ -48,7 +69,7 @@ fn get_value(scope: &HashMap<AssignTarget, Value>, target: &ValueTarget) -> Resu
         &ValueTarget::Literal(Literal::Number(i)) => Ok(Value::Number(i)),
         &ValueTarget::Literal(Literal::Boolean(b)) => Ok(Value::Boolean(b)),
         &ValueTarget::Register(ref reg) => lookup_value(scope, &AssignTarget::Register(reg.clone())),
-        &ValueTarget::Variable(ref var) => lookup_value(scope, &AssignTarget::Variable(var.clone()))
+        &ValueTarget::Variable(ref var) => lookup_value(scope, &AssignTarget::Variable(var.clone())),
     }
 }
 
@@ -59,7 +80,7 @@ fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, Ex
                 println!("--> {:?}", arg);
             }
             Ok(Value::Unit)
-        }
+        },
     }
 }
 
@@ -165,6 +186,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                 }).clone();
                                 let subroutine_frame = Frame {
                                     parent: Some((assign_tgt.clone(), Box::new(frame))),
+                                    continuation: None,
                                     instructions: subroutine_instructions,
                                     program_counter: 0,
                                     scope: subroutine_scope,
@@ -172,10 +194,48 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                 frame = subroutine_frame;
                                 continue;
                             }
-                        };
+                        }
                     }
                 }
-            }
+            },
+            Instruction::MakeCont(ref assign_tgt, ref symbol, ref sub_name, ref argument_targets) => {
+                let argument_values: Result<Vec<Value>, ExecutionError> = argument_targets.iter().map(|ref target| {
+                    get_value(&frame.scope, target)
+                }).collect();
+
+                match program.subroutines.get(sub_name) {
+                    None => return Err(ExecutionError::UnknownSubroutine(sub_name.clone())),
+                    Some(ref subroutine) => {
+
+                        let argument_values: Vec<Value> = argument_values?;
+
+                        match subroutine.implementation {
+                            Implementation::Builtin(_) => panic!("Can't create continuation of a builtin"),
+                            Implementation::Block(ref compound_statement) => {
+                                let subroutine_scope: HashMap<AssignTarget, Value> = subroutine.arguments.iter().map(|arg_name| {
+                                    AssignTarget::Variable(arg_name.clone())
+                                }).zip(argument_values).collect();
+                                let subroutine_instructions = subroutine_instruction_cache.entry(sub_name.clone()).or_insert({
+                                    jit(compound_statement)
+                                }).clone();
+                                let subroutine_frame = Frame {
+                                    parent: None,
+                                    continuation: Some(symbol.clone()),
+                                    instructions: subroutine_instructions,
+                                    program_counter: 0,
+                                    scope: subroutine_scope,
+                                };
+                                let continuation = Continuation {
+                                    symbol: symbol.clone(),
+                                    frame: Rc::new(Cell::new(subroutine_frame)),
+                                };
+                                frame.scope.insert(assign_tgt.clone(), Value::Cont(continuation));
+                            }
+                        }
+                    },
+                }
+            },
+            _ => panic!("CONT"),
         }
 
         frame.program_counter += 1;

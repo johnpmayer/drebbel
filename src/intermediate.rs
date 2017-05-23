@@ -31,7 +31,7 @@ pub enum InstructionTree {
     MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
     RunCont(AssignTarget, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
-    SuspendCont(Symbol, Option<ValueTarget>),
+    SuspendCont(AssignTarget, Symbol, Option<ValueTarget>),
 }
 
 fn next_register(register_counter: &mut i64) -> RegisterName {
@@ -175,7 +175,9 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
                                   body_trees)
         },
         &Statement::SuspendCont(ref symbol, None) => {
-            InstructionTree::SuspendCont(symbol.clone(), None)
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            InstructionTree::SuspendCont(result_target, symbol.clone(), None)
         },
         &Statement::SuspendCont(ref symbol, Some(ref expression)) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expression);
@@ -183,7 +185,7 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
             let result_target = AssignTarget::Register(result_register.clone());
             InstructionTree::CompoundInstruction(
                 vec!( expr_tree
-                    , InstructionTree::SuspendCont(symbol.clone(), Some(expr_value))))
+                    , InstructionTree::SuspendCont(result_target, symbol.clone(), Some(expr_value))))
         },
     }
 }
@@ -220,7 +222,7 @@ pub enum Instruction {
     MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
     RunCont(AssignTarget, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
-    SuspendCont(Symbol, Option<ValueTarget>),
+    SuspendCont(AssignTarget, Symbol, Option<ValueTarget>),
 }
 
 const ALWAYS: ValueTarget = ValueTarget::Literal(Literal::Boolean(true));
@@ -285,8 +287,8 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
                 instructions.push(Instruction::RunCont(tgt, val)),
             InstructionTree::IsDoneCont(tgt, val) =>
                 instructions.push(Instruction::IsDoneCont(tgt, val)),
-            InstructionTree::SuspendCont(symbol, opt_val) =>
-                instructions.push(Instruction::SuspendCont(symbol, opt_val)),
+            InstructionTree::SuspendCont(tgt, symbol, opt_val) =>
+                instructions.push(Instruction::SuspendCont(tgt, symbol, opt_val)),
 
         }
     }
