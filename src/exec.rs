@@ -235,7 +235,18 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     },
                 }
             },
-            _ => panic!("CONT"),
+            Instruction::RunCont(ref assign_tgt, ref value_tgt) => {
+                panic!("TODO")
+            },
+            Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
+                panic!("TODO")
+            },
+            Instruction::SuspendCont(ref assign_tgt, ref symbol, None) => {
+                panic!("TODO")
+            },
+            Instruction::SuspendCont(ref assign_tgt, ref symbol, Some(ref value_tgt)) => {
+                panic!("TODO")
+            },
         }
 
         frame.program_counter += 1;
