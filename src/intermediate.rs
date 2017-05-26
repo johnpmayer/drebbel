@@ -31,6 +31,7 @@ pub enum InstructionTree {
     MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
     RunCont(AssignTarget, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
+    LastValueCont(AssignTarget, ValueTarget),
     SuspendCont(AssignTarget, Symbol, Option<ValueTarget>),
 }
 
@@ -140,6 +141,15 @@ fn transform_expression(register_counter: &mut i64,
                     , InstructionTree::IsDoneCont(result_target, expr_value)));
             (ValueTarget::Register(result_register), tree)
         },
+        &Expression::LastValueCont(ref expr) => {
+            let (expr_value, expr_tree) = transform_expression(register_counter, expr);
+            let result_register = next_register(register_counter);
+            let result_target = AssignTarget::Register(result_register.clone());
+            let tree = InstructionTree::CompoundInstruction(
+                vec!( expr_tree
+                    , InstructionTree::LastValueCont(result_target, expr_value)));
+            (ValueTarget::Register(result_register), tree)
+        },
     }
 }
 
@@ -222,6 +232,7 @@ pub enum Instruction {
     MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
     RunCont(AssignTarget, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
+    LastValueCont(AssignTarget, ValueTarget),
     SuspendCont(AssignTarget, Symbol, Option<ValueTarget>),
 }
 
@@ -287,6 +298,8 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
                 instructions.push(Instruction::RunCont(tgt, val)),
             InstructionTree::IsDoneCont(tgt, val) =>
                 instructions.push(Instruction::IsDoneCont(tgt, val)),
+            InstructionTree::LastValueCont(tgt, val) =>
+                instructions.push(Instruction::LastValueCont(tgt, val)),
             InstructionTree::SuspendCont(tgt, symbol, opt_val) =>
                 instructions.push(Instruction::SuspendCont(tgt, symbol, opt_val)),
 

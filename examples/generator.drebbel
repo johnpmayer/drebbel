@@ -10,7 +10,8 @@ END.
 BEGIN
   gen := CONT gen range(5);
   WHILE ! (ISDONE gen) DO
-    x := RUN gen;
+    gen := RUN gen;
+    x := LASTVALUE gen;
     print(x)
   DONE
 END.

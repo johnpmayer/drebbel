@@ -37,6 +37,7 @@ pub enum Expression {
     MakeCont(Symbol, SubroutineName, Vec<Box<Expression>>),
     RunCont(Box<Expression>),
     IsDoneCont(Box<Expression>),
+    LastValueCont(Box<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
