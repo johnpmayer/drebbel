@@ -108,7 +108,7 @@ impl Stack {
         }
     }
 
-    fn with_current_frame<F, T>(&mut self, mut f: F) -> Result<T, ExecutionError> where F: FnOnce(&mut Frame) -> Result<T, ExecutionError> {
+    fn with_current_frame<F, T>(&mut self, f: F) -> Result<T, ExecutionError> where F: FnOnce(&mut Frame) -> Result<T, ExecutionError> {
         match self.frames.last_mut() {
             None => Err(ExecutionError::StackUnderflow),
             Some(mut frame) => f(frame)
@@ -122,16 +122,40 @@ impl Stack {
         })
     }
 
-    fn pop_subroutine_frame(&mut self, value: Value) -> Result<(), ExecutionError> {
-        self.frames.pop();
-        self.with_current_frame(|mut frame| frame.assign_subroutine(value))
+    fn move_current_program_counter(&mut self, offset: isize) -> Result<(), ExecutionError> {
+        self.with_current_frame(|mut current_frame| {
+            let new_counter = (current_frame.program_counter as isize) + offset;
+            if new_counter < 0 {
+                return Err(ExecutionError::JumpOutOfBounds);
+            }
+            current_frame.program_counter = new_counter as usize;
+            Ok(())
+        })
+    }
+
+    fn advance_current_program_counter(&mut self) -> Result<(), ExecutionError> {
+        self.move_current_program_counter(1)
+    }
+
+    fn pop_subroutine_frame(&mut self, value: Value) -> Result<Option<Frame>, ExecutionError> {
+        match self.frames.pop() {
+            None => return Err(ExecutionError::JumpOutOfBounds),
+            Some(exited_frame) => {
+                if self.frames.is_empty() {
+                    Ok(Some(exited_frame))
+                } else {
+                    self.with_current_frame(|mut frame| frame.assign_subroutine(value))?;
+                    Ok(None)
+                }
+            },
+        }
     }
 
     fn push_subroutine_frame(&mut self, assign_tgt: &AssignTarget, frame: Frame) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
             frame.call_target = Some(assign_tgt.clone());
             Ok(())
-        });
+        })?;
         self.frames.push(frame);
         Ok(())
     }
@@ -164,6 +188,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
     let mut stack = Stack::new(Frame::new(jit(&program.entry)));
 
     let mut subroutine_instruction_cache: HashMap<SubroutineName, Vec<Instruction>> = HashMap::new();
+    // let mut final_frame: Option<Frame> = None;
 
     loop {
 
@@ -171,27 +196,27 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
         let instruction = {
             stack.current_frame()?.current_instruction().clone()
         };
-        let current_frame: &mut Frame = panic!("MUTABLE");
+        // let current_frame: &mut Frame = panic!("MUTABLE");
 
         println!("### Executing instruction {:?}", instruction);
 
         let _: () = match instruction {
             Instruction::Assign(ref assign_tgt, ref value_tgt) => {
-                let value = current_frame.get_value(value_tgt)?;
-                current_frame.assign(assign_tgt, value);
+                let value = stack.current_frame()?.get_value(value_tgt)?;
+                stack.assign_current_frame(assign_tgt, value)?;
             },
             Instruction::ApplyUnOp(ref assign_tgt, ref op, ref value_tgt) => {
-                let value = current_frame.get_value(value_tgt)?;
+                let value = stack.current_frame()?.get_value(value_tgt)?;
                 let result = match (op, &value) {
                     (&UnaryOperator::Minus, &Value::Number(i)) => Value::Number(-i),
                     (&UnaryOperator::Not, &Value::Boolean(b)) => Value::Boolean(!b),
                     _ => return Err(ExecutionError::TypeError(format!("Can't apply {:?} to {:?}", op, value)))
                 };
-                current_frame.assign(assign_tgt, result);
+                stack.assign_current_frame(assign_tgt, result)?;
             },
             Instruction::ApplyBinOp(ref assign_tgt, ref l_value_tgt, ref op, ref r_value_tgt) => {
-                let l_value = current_frame.get_value(l_value_tgt)?;
-                let r_value = current_frame.get_value(r_value_tgt)?;
+                let l_value = stack.current_frame()?.get_value(l_value_tgt)?;
+                let r_value = stack.current_frame()?.get_value(r_value_tgt)?;
                 let result = match (&l_value, op, &r_value) {
                     (&Value::Number(l), &InfixBinaryOperator::Add, &Value::Number(r)) => Value::Number(l + r),
                     (&Value::Number(l), &InfixBinaryOperator::Sub, &Value::Number(r)) => Value::Number(l - r),
@@ -204,32 +229,34 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     (&Value::Number(l), &InfixBinaryOperator::Lt, &Value::Number(r)) => Value::Boolean(l < r),
                     _ => return Err(ExecutionError::TypeError(format!("Can't apply {:?} to {:?} and {:?}", l_value, op, r_value)))
                 };
-                current_frame.assign(assign_tgt, result);
+                stack.assign_current_frame(assign_tgt, result)?;
             },
             Instruction::Return(value_tgt) => {
                 let value = match value_tgt {
                     None => Value::Unit,
-                    Some(ref value_tgt) => current_frame.get_value(value_tgt)?
+                    Some(ref value_tgt) => stack.current_frame()?.get_value(value_tgt)?
                 };
-                stack.pop_subroutine_frame(value)?
+                if let Some(final_frame) = stack.pop_subroutine_frame(value)? {
+                    // Dump frame and quit execution
+                    for (target, value) in final_frame.scope.iter() {
+                        println!("### Final value of {:?} = {:?}", target, value)
+                    }
+                    break
+                }
             },
             Instruction::ConditionalJumpRelative(ref value_tgt, offset) => {
-                let test_value = match current_frame.get_value(value_tgt)? {
+                let test_value = match stack.current_frame()?.get_value(value_tgt)? {
                     Value::Boolean(b) => b,
                     v => return Err(ExecutionError::TypeError(format!("Can't use {:?} for conditional", v)))
                 };
                 if test_value {
-                    let new_counter = (current_frame.program_counter as isize) + offset;
-                    if new_counter < 0 {
-                        return Err(ExecutionError::JumpOutOfBounds);
-                    }
-                    current_frame.program_counter = new_counter as usize;
+                    stack.move_current_program_counter(offset)?;
                     continue;
                 }
             },
             Instruction::CallSubroutine(ref assign_tgt, ref sub_name, ref argument_targets) => {
                 let argument_values: Result<Vec<Value>, ExecutionError> = argument_targets.iter().map(|ref target| {
-                    current_frame.get_value(target)
+                    stack.current_frame()?.get_value(target)
                 }).collect();
 
                 match program.subroutines.get(sub_name) {
@@ -241,7 +268,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                         match subroutine.implementation {
                             Implementation::Builtin(ref builtin) => {
                                 let value = execute_builtin(builtin, argument_values)?;
-                                current_frame.assign(assign_tgt, value)
+                                stack.assign_current_frame(assign_tgt, value)?
                             }
                             Implementation::Block(ref compound_statement) => {
                                 let subroutine_scope: HashMap<AssignTarget, Value> = subroutine.arguments.iter().map(|arg_name| {
@@ -257,7 +284,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                     program_counter: 0,
                                     scope: subroutine_scope,
                                 };
-                                stack.push_subroutine_frame(assign_tgt, subroutine_frame);
+                                stack.push_subroutine_frame(assign_tgt, subroutine_frame)?;
                                 continue;
                             }
                         }
@@ -266,7 +293,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             },
             Instruction::MakeCont(ref assign_tgt, ref symbol, ref sub_name, ref argument_targets) => {
                 let argument_values: Result<Vec<Value>, ExecutionError> = argument_targets.iter().map(|ref target| {
-                    current_frame.get_value(target)
+                    stack.current_frame()?.get_value(target)
                 }).collect();
 
                 match program.subroutines.get(sub_name) {
@@ -297,7 +324,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                     last_value: Value::Unit,
                                     frames: vec!(subroutine_frame),
                                 };
-                                current_frame.assign(assign_tgt, Value::Cont(Box::new(continuation)))
+                                stack.assign_current_frame(assign_tgt, Value::Cont(Box::new(continuation)))?
                             }
                         }
                     },
@@ -305,7 +332,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             },
             Instruction::RunCont(ref assign_tgt, ref value_tgt) => {
                 panic!("TODO RunCont")
-                // let mut cont = match current_frame.get_value(value_tgt)? {
+                // let mut cont = match stack.current_frame()?.get_value(value_tgt)? {
                 //     Value::Cont(cont) => cont,
                 //     _ => return Err(ExecutionError::TypeError(format!("RUN can only be applied to continuation values"))),
                 // };
@@ -320,25 +347,25 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 // continue;
             },
             Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
-                let mut value = current_frame.get_value(value_tgt)?;;
+                let value = stack.current_frame()?.get_value(value_tgt)?;;
                 let done = match value {
                     Value::Cont(cont) => cont.done,
                     _ => return Err(ExecutionError::TypeError(format!("ISDONE can only be applied to continuation values"))),
                 };
-                current_frame.assign(assign_tgt, Value::Boolean(done))
+                stack.assign_current_frame(assign_tgt, Value::Boolean(done))?
             },
             Instruction::LastValueCont(ref assign_tgt, ref value_tgt) => {
-                let mut value = current_frame.get_value(value_tgt)?;;
+                let value = stack.current_frame()?.get_value(value_tgt)?;;
                 let last_value = match value {
-                    Value::Cont(mut cont) => cont.last_value,
+                    Value::Cont(cont) => cont.last_value,
                     _ => return Err(ExecutionError::TypeError(format!("LASTVALUE can only be applied to continuation values"))),
                 };
-                current_frame.assign(assign_tgt, last_value)
+                stack.assign_current_frame(assign_tgt, last_value)?
             },
             Instruction::SuspendCont(_, ref symbol, ref value_tgt) => {
                 let value = match value_tgt {
                     &None => Value::Unit,
-                    &Some(ref value_tgt) => current_frame.get_value(value_tgt)?
+                    &Some(ref value_tgt) => stack.current_frame()?.get_value(value_tgt)?
                 };
                 // {
                 //     let mut frame_ptr: &mut Frame = &mut frame;
@@ -358,13 +385,12 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             },
         };
 
-        current_frame.program_counter += 1;
-
+        stack.advance_current_program_counter()?
     }
 
-    for (target, value) in stack.current_frame()?.scope.iter() {
-        println!("### Final value of {:?} = {:?}", target, value)
-    }
+    // for (target, value) in stack.current_frame()?.scope.iter() {
+    //     println!("### Final value of {:?} = {:?}", target, value)
+    // }
 
     Ok(())
 
