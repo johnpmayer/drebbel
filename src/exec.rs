@@ -159,6 +159,20 @@ impl Stack {
         self.frames.push(frame);
         Ok(())
     }
+
+    fn push_coroutine_frames(&mut self, assign_tgt: &AssignTarget, symbol: &Symbol, frames: &Vec<Frame>) -> Result<(), ExecutionError> {
+        self.with_current_frame(|mut frame| {
+            frame.call_target = Some(assign_tgt.clone());
+            frame.running_continuation = Some(symbol.clone());
+            Ok(())
+        })?;
+        self.frames.extend_from_slice(frames.as_slice());
+        Ok(())
+    }
+
+    fn unwind_coroutine(&mut self, symbol: &Symbol) -> Result<Vec<Frame>, ExecutionError> {
+        panic!("TODO unwind");
+    }
 }
 
 #[derive(Debug)]
@@ -331,20 +345,12 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 }
             },
             Instruction::RunCont(ref assign_tgt, ref value_tgt) => {
-                panic!("TODO RunCont")
-                // let mut cont = match stack.current_frame()?.get_value(value_tgt)? {
-                //     Value::Cont(cont) => cont,
-                //     _ => return Err(ExecutionError::TypeError(format!("RUN can only be applied to continuation values"))),
-                // };
-                // stack.current_frame().running_continuation = Some(cont.symbol.clone());
-                // {
-                //     let mut cont_frame_ptr = &mut cont.frame;
-                //     while let Some((_, ref cont_frame_ptr)) = cont_frame_ptr.parent {};
-                //     // assert!(cont_frame_ptr.parent == None);
-                //     cont_frame_ptr.parent = Some((assign_tgt.clone(), Box::new(frame)));
-                // }
-                // frame = cont.frame;
-                // continue;
+                let cont = match stack.current_frame()?.get_value(value_tgt)? {
+                    Value::Cont(cont) => cont,
+                    _ => return Err(ExecutionError::TypeError(format!("RUN can only be applied to continuation values"))),
+                };
+                stack.push_coroutine_frames(assign_tgt, &cont.symbol, &cont.frames)?;
+                continue
             },
             Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
                 let value = stack.current_frame()?.get_value(value_tgt)?;;
@@ -362,7 +368,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 };
                 stack.assign_current_frame(assign_tgt, last_value)?
             },
-            Instruction::SuspendCont(_, ref symbol, ref value_tgt) => {
+            Instruction::SuspendCont(ref symbol, ref value_tgt) => {
                 let value = match value_tgt {
                     &None => Value::Unit,
                     &Some(ref value_tgt) => stack.current_frame()?.get_value(value_tgt)?
