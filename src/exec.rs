@@ -170,7 +170,10 @@ impl Stack {
         Ok(())
     }
 
-    fn unwind_coroutine(&mut self, symbol: &Symbol) -> Result<Vec<Frame>, ExecutionError> {
+    fn unwind_coroutine(&mut self, symbol: &Symbol, value: Value) -> Result<Vec<Frame>, ExecutionError> {
+        // find the index of the innermost frame matching the symbol
+        // self.frames.split_off(^^index)
+        
         panic!("TODO unwind");
     }
 }
@@ -369,34 +372,16 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 stack.assign_current_frame(assign_tgt, last_value)?
             },
             Instruction::SuspendCont(ref symbol, ref value_tgt) => {
-                let value = match value_tgt {
+                let value: Value = match value_tgt {
                     &None => Value::Unit,
                     &Some(ref value_tgt) => stack.current_frame()?.get_value(value_tgt)?
                 };
-                // {
-                //     let mut frame_ptr: &mut Frame = &mut frame;
-                //     loop {
-                //         let mut frame_parent_ptr: &mut Frame = match frame_ptr.parent {
-                //             None => return Err(ExecutionError::UncaughtSuspension(symbol.clone())),
-                //             Some((_, ref mut frame_parent_ptr)) => frame_parent_ptr,
-                //         };
-                //         match frame_parent_ptr.running_continuation {
-                //             None => frame_ptr = frame_parent_ptr,
-                //             _ => panic!("Parent frame is running a continuation")
-                //         }
-                //         panic!("TODO Suspend")
-                //     }
-                // }
-                panic!("TODO Suspend")
+                stack.unwind_coroutine(symbol, value)?;
             },
         };
 
         stack.advance_current_program_counter()?
     }
-
-    // for (target, value) in stack.current_frame()?.scope.iter() {
-    //     println!("### Final value of {:?} = {:?}", target, value)
-    // }
 
     Ok(())
 
