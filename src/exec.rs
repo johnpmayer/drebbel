@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 
+use std::io::stdin;
+
 #[derive(Clone, Debug)]
 enum Value {
     Unit,
@@ -76,6 +78,7 @@ impl Frame {
         };
         self.assign(&target, value);
         self.call_target = None;
+        self.running_continuation = None; // TODO: verify this is always correct...
         Ok(())
     }
 
@@ -144,7 +147,16 @@ impl Stack {
                 if self.frames.is_empty() {
                     Ok(Some(exited_frame))
                 } else {
-                    self.with_current_frame(|mut frame| frame.assign_subroutine(value))?;
+                    let assign_value = match self.current_frame()?.running_continuation.clone() {
+                        None => value,
+                        Some(ref symbol) => Value::Cont(Box::new(Continuation {
+                            done: true,
+                            symbol: symbol.clone(),
+                            last_value: value,
+                            frames: vec!(),
+                        })),
+                    };
+                    self.with_current_frame(|mut frame| frame.assign_subroutine(assign_value))?;
                     Ok(None)
                 }
             },
@@ -170,11 +182,25 @@ impl Stack {
         Ok(())
     }
 
-    fn unwind_coroutine(&mut self, symbol: &Symbol, value: Value) -> Result<Vec<Frame>, ExecutionError> {
-        // find the index of the innermost frame matching the symbol
-        // self.frames.split_off(^^index)
+    fn unwind_coroutine(&mut self, symbol: &Symbol, value: Value) -> Result<(), ExecutionError> {
+        let innermost_symbol_frame_index = self.frames.iter().rposition(|ref frame| {
+            match frame.running_continuation {
+                None => false,
+                Some(ref frame_symbol) => *frame_symbol == *symbol
+            }
+        }).ok_or(ExecutionError::UncaughtSuspension(symbol.clone()))?;
         
-        panic!("TODO unwind");
+        let cont_frames = self.frames.split_off(innermost_symbol_frame_index + 1);
+        let continuation = Continuation {
+            done: false,
+            symbol: symbol.clone(),
+            last_value: value,
+            frames: cont_frames
+        };
+    
+        let cont_assign_target: AssignTarget = self.current_frame()?.call_target.clone().ok_or(ExecutionError::UnsetReturnTarget)?;
+
+        self.assign_current_frame(&cont_assign_target, Value::Cont(Box::new(continuation)))
     }
 }
 
@@ -376,11 +402,17 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     &None => Value::Unit,
                     &Some(ref value_tgt) => stack.current_frame()?.get_value(value_tgt)?
                 };
+                stack.advance_current_program_counter()?;
                 stack.unwind_coroutine(symbol, value)?;
             },
         };
 
-        stack.advance_current_program_counter()?
+        stack.advance_current_program_counter()?;
+
+        // {
+        //     let mut input = String::new();
+        //     stdin().read_line(&mut input).unwrap();
+        // }
     }
 
     Ok(())
