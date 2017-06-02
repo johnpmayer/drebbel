@@ -46,6 +46,7 @@ pub enum Statement {
     Assignment(VariableName, Box<Expression>),
     Return(Option<Box<Expression>>),
     Loop(Box<Expression>, Box<StatementList>),
+    Conditional(Box<Expression>, Box<StatementList>, Box<StatementList>),
     SuspendCont(Symbol, Option<Box<Expression>>),
     Empty,
 }

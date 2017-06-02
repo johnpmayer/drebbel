@@ -90,7 +90,7 @@ Expression4: Box<Expression> = {
 };
 
 Expression5: Box<Expression> = {
-    "IF" <expr_test:Expression> "THEN" <expr_true:Expression> "ELSE" <expr_false:Expression4> =>
+    "IFE" <expr_test:Expression> "THEN" <expr_true:Expression> "ELSE" <expr_false:Expression4> "EFI" =>
         Box::new(Expression::Conditional(expr_test, expr_true, expr_false)),
     "RUN" <cont:Expression4> => Box::new(Expression::RunCont(cont)),
     "ISDONE" <cont:Expression4> => Box::new(Expression::IsDoneCont(cont)),
@@ -107,6 +107,7 @@ pub Statement: Statement = {
     "RETURN" <expr:Expression?> => Statement::Return(expr),
     "SUSPEND" <scope:Symbol> <expr:Expression?> => Statement::SuspendCont(scope, expr),
     Loop,
+    Conditional,
     => Statement::Empty,
 };
 
@@ -124,6 +125,11 @@ CompoundStatement: CompoundStatement = {
 Loop: Statement = {
     "WHILE" <test_expr:Expression> "DO" <sl:StatementList> "DONE" =>
         Statement::Loop(test_expr, Box::new(sl)),
+};
+
+Conditional: Statement = {
+    "IF" <expr_test:Expression> "THEN" <stmts_true:StatementList> "ELSE" <stmts_false:StatementList> "FI" =>
+        Statement::Conditional(expr_test, Box::new(stmts_true), Box::new(stmts_false)),
 };
 
 Subroutine: (SubroutineName, Subroutine) = {

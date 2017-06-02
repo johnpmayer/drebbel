@@ -193,6 +193,20 @@ fn transform_statement(register_counter: &mut i64, statement: &Statement) -> Ins
                 vec!( expr_tree
                     , InstructionTree::SuspendCont(symbol.clone(), Some(expr_value))))
         },
+        &Statement::Conditional(ref test_expr, ref truthy_stmts, ref falsey_stmts) => {
+            let (test_value, test_tree) = transform_expression(register_counter, test_expr);
+            let truthy_trees = transform_statement_list(register_counter, truthy_stmts);
+            let falsey_trees = transform_statement_list(register_counter, falsey_stmts);
+            let tree = InstructionTree::CompoundInstruction(
+                vec!( test_tree
+                    , InstructionTree::Conditional(
+                        test_value,
+                        Box::new(InstructionTree::CompoundInstruction(truthy_trees)),
+                        Box::new(InstructionTree::CompoundInstruction(falsey_trees))
+                    ))
+            );
+            tree
+        }
     }
 }
 

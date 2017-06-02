@@ -1,8 +1,10 @@
 SUB fib (n)
 BEGIN
-  RETURN IF (n == 1) || (n == 2)
-  THEN 1
-  ELSE fib(n - 1) + fib(n - 2)
+  RETURN
+    IFE (n == 1) || (n == 2)
+    THEN 1
+    ELSE fib(n - 1) + fib(n - 2)
+    EFI
 END.
 
 BEGIN

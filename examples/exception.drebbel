@@ -1,0 +1,27 @@
+SUB work (x) 
+BEGIN
+    IF x == 0
+    THEN
+        SUSPEND err
+    ELSE
+        print(x * 2)
+    FI
+END.
+
+SUB try (cont)
+BEGIN
+    cont := RUN cont;
+    IF ! (ISDONE cont)
+    THEN
+        print(-1)
+    ELSE
+        RETURN (LASTVALUE cont)
+    FI
+END.
+
+BEGIN
+    workA := CONT err work(5);
+    try(workA);
+    workB := CONT err work(0);
+    try(workB);
+END.
