@@ -1,0 +1,6 @@
+BEGIN
+    n := 6;
+    n_ref := newref n;
+    n1 := *n_ref;
+    print(n1)
+END.

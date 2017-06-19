@@ -35,7 +35,7 @@ fn exec(filename: &str) {
 
     program.subroutines.insert(SubroutineName(String::from("print")), Subroutine{
         arguments: vec!(VariableName(String::from("value"))),
-        implementation: Implementation::Builtin(Builtin::Print)
+        implementation: Implementation::Builtin(Builtin::Print),
     });
 
     match exec::execute_program(&program) {

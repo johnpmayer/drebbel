@@ -6,6 +6,8 @@ use intermediate::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use std::io::stdin;
 
@@ -15,6 +17,7 @@ enum Value {
     Number(i64),
     Boolean(bool),
     Cont(Box<Continuation>),
+    Ref(Rc<RefCell<Value>>),
 }
 
 #[derive(Clone)]
@@ -253,6 +256,8 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 let result = match (op, &value) {
                     (&UnaryOperator::Minus, &Value::Number(i)) => Value::Number(-i),
                     (&UnaryOperator::Not, &Value::Boolean(b)) => Value::Boolean(!b),
+                    (&UnaryOperator::Deref, &Value::Ref(ref rc)) => rc.borrow().clone(),
+                    (&UnaryOperator::NewRef, v) => Value::Ref(Rc::new(RefCell::new(v.clone()))),
                     _ => return Err(ExecutionError::TypeError(format!("Can't apply {:?} to {:?}", op, value)))
                 };
                 stack.assign_current_frame(assign_tgt, result)?;
@@ -390,7 +395,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 stack.assign_current_frame(assign_tgt, Value::Boolean(done))?
             },
             Instruction::LastValueCont(ref assign_tgt, ref value_tgt) => {
-                let value = stack.current_frame()?.get_value(value_tgt)?;;
+                let value = stack.current_frame()?.get_value(value_tgt)?;
                 let last_value = match value {
                     Value::Cont(cont) => cont.last_value,
                     _ => return Err(ExecutionError::TypeError(format!("LASTVALUE can only be applied to continuation values"))),

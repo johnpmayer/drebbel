@@ -18,7 +18,7 @@ pub struct Symbol(pub String);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOperator {
-    Minus, Not,
+    Minus, Not, Deref, NewRef,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -27,9 +27,15 @@ pub enum InfixBinaryOperator {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expression {
+pub enum AssignmentExpression {
     Var(VariableName),
+    Deref(Box<AssignmentExpression>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expression {
     Lit(Literal),
+    Var(VariableName),
     ApplyUnOp(UnaryOperator, Box<Expression>),
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
     CallSubByValue(SubroutineName, Vec<Box<Expression>>),
@@ -43,7 +49,7 @@ pub enum Expression {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     EvaluateIgnore(Box<Expression>),
-    Assignment(VariableName, Box<Expression>),
+    Assignment(AssignmentExpression, Box<Expression>),
     Return(Option<Box<Expression>>),
     Loop(Box<Expression>, Box<StatementList>),
     Conditional(Box<Expression>, Box<StatementList>, Box<StatementList>),

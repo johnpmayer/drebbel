@@ -35,6 +35,8 @@ Symbol: Symbol = Identifier => Symbol(<>);
 UnaryOp1: UnaryOperator = {
     "-" => UnaryOperator::Minus,
     "!" => UnaryOperator::Not,
+    "*" => UnaryOperator::Deref,
+    "newref" => UnaryOperator::NewRef,
 };
 
 CallSubroutine: Box<Expression> =  {
@@ -101,9 +103,13 @@ Expression5: Box<Expression> = {
 // Left-associative; Expression is on left, Factor is on right
 pub Expression: Box<Expression> = Expression5;
 
+pub AssignmentExpression: AssignmentExpression = {
+    VariableName => AssignmentExpression::Var(<>),
+};
+
 pub Statement: Statement = {
     Expression => Statement::EvaluateIgnore(<>),
-    <v:VariableName> ":=" <expr:Expression> => Statement::Assignment(v, expr),
+    <ae:AssignmentExpression> ":=" <expr:Expression> => Statement::Assignment(ae, expr),
     "RETURN" <expr:Expression?> => Statement::Return(expr),
     "SUSPEND" <scope:Symbol> <expr:Expression?> => Statement::SuspendCont(scope, expr),
     Loop,

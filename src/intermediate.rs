@@ -53,7 +53,8 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( l_tree
                     , r_tree
-                    , InstructionTree::ApplyBinOp(AssignTarget::Register(next_register.clone()), l_value, op.clone(), r_value))
+                    , InstructionTree::ApplyBinOp(AssignTarget::Register(next_register.clone()), l_value, op.clone(), r_value)
+                    )
             );
             (ValueTarget::Register(next_register), tree)
         },
@@ -62,7 +63,8 @@ fn transform_expression(register_counter: &mut i64,
             let next_register = next_register(register_counter);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( r_tree
-                    , InstructionTree::ApplyUnOp(AssignTarget::Register(next_register.clone()), op.clone(), r_value))
+                    , InstructionTree::ApplyUnOp(AssignTarget::Register(next_register.clone()), op.clone(), r_value)
+                    )
             );
             (ValueTarget::Register(next_register), tree)
         },
@@ -84,7 +86,8 @@ fn transform_expression(register_counter: &mut i64,
                             vec!( falsey_tree
                                 , InstructionTree::Assign(result_target, falsey_value))
                         ))
-                    ))
+                        )
+                    )
             );
             (ValueTarget::Register(result_register), tree)
         },
@@ -156,12 +159,15 @@ fn transform_expression(register_counter: &mut i64,
 fn transform_statement(register_counter: &mut i64, statement: &Statement) -> InstructionTree {
     match statement {
         &Statement::Empty => InstructionTree::Noop,
-        &Statement::Assignment(ref variable_name, ref expression) => {
+        &Statement::Assignment(AssignmentExpression::Var(ref variable_name), ref expression) => {
             let (value, expression_tree) = transform_expression(register_counter, expression);
             InstructionTree::CompoundInstruction(
                 vec!( expression_tree
                     , InstructionTree::Assign(AssignTarget::Variable(variable_name.clone()), value))
             )
+        },
+        &Statement::Assignment(AssignmentExpression::Deref(ref ref_expression), ref expression) => {
+            panic!("TODO Assignment Deref")
         },
         &Statement::EvaluateIgnore(ref expression) => {
             let (_, tree) = transform_expression(register_counter, expression);
@@ -312,7 +318,6 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
                 instructions.push(Instruction::LastValueCont(tgt, val)),
             InstructionTree::SuspendCont(symbol, opt_val) =>
                 instructions.push(Instruction::SuspendCont(symbol, opt_val)),
-
         }
     }
 
