@@ -1,0 +1,6 @@
+BEGIN
+    arr := newArrayRef();
+    arr[0] := 42;
+    x := arr[0];
+    print(x)
+END.

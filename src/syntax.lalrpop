@@ -39,6 +39,12 @@ UnaryOp1: UnaryOperator = {
     "newref" => UnaryOperator::NewRef,
 };
 
+ExpressionSimple: Box<Expression> = {
+    VariableName => Box::new(Expression::Var(<>)),
+    Literal => Box::new(Expression::Lit(<>)),
+    "(" <Expression> ")",
+};
+
 CallSubroutine: Box<Expression> =  {
     <sub:SubroutineName> "(" <parameters:Comma<Expression>> ")" =>
         Box::new(Expression::CallSubByValue(sub, parameters)),
@@ -49,13 +55,16 @@ MakeContinuation: Box<Expression> = {
         Box::new(Expression::MakeCont(scope, sub, parameters)),
 };
 
-Expression1: Box<Expression> = {
-    VariableName => Box::new(Expression::Var(<>)),
-    Literal => Box::new(Expression::Lit(<>)),
-    UnaryOp1 Expression1 => Box::new(Expression::ApplyUnOp(<>)),
+Expression0: Box<Expression> = {
     CallSubroutine,
     MakeContinuation,
-    "(" <Expression> ")",
+    <e_obj:ExpressionSimple> "[" <e_index:Expression> "]" => Box::new(Expression::Subscript(e_obj, e_index)),
+    ExpressionSimple,
+};
+
+Expression1: Box<Expression> = {
+    UnaryOp1 Expression1 => Box::new(Expression::ApplyUnOp(<>)),
+    Expression0,
 };
 
 BinaryOp2: InfixBinaryOperator = {
@@ -103,13 +112,9 @@ Expression5: Box<Expression> = {
 // Left-associative; Expression is on left, Factor is on right
 pub Expression: Box<Expression> = Expression5;
 
-pub AssignmentExpression: AssignmentExpression = {
-    VariableName => AssignmentExpression::Var(<>),
-};
-
 pub Statement: Statement = {
+    <ae:Expression> ":=" <expr:Expression> => Statement::Assignment(ae, expr),
     Expression => Statement::EvaluateIgnore(<>),
-    <ae:AssignmentExpression> ":=" <expr:Expression> => Statement::Assignment(ae, expr),
     "RETURN" <expr:Expression?> => Statement::Return(expr),
     "SUSPEND" <scope:Symbol> <expr:Expression?> => Statement::SuspendCont(scope, expr),
     Loop,

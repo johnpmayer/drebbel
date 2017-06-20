@@ -38,6 +38,16 @@ fn exec(filename: &str) {
         implementation: Implementation::Builtin(Builtin::Print),
     });
 
+    program.subroutines.insert(SubroutineName(String::from("newArrayRef")), Subroutine{
+        arguments: vec!(),
+        implementation: Implementation::Builtin(Builtin::NewArrayRef),
+    });
+
+    program.subroutines.insert(SubroutineName(String::from("newHashRef")), Subroutine{
+        arguments: vec!(),
+        implementation: Implementation::Builtin(Builtin::NewHashRef),
+    });
+
     match exec::execute_program(&program) {
         Ok(()) => println!("Program terminated cleanly"),
         Err(err) => println!("Program crashed with error {:?}", err)

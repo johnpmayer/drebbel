@@ -8,7 +8,7 @@ pub mod exec;
 use std::collections::HashMap;
 
 pub use syntax::{parse_Expression, parse_Statement, parse_Program};
-pub use intermediate::{transform_compound_statement, flatten_instruction_tree};
+pub use intermediate::{transform_compound_statement, flatten_instruction_tree, jit};
 
 #[cfg(test)]
 use self::ast::*;
@@ -122,8 +122,17 @@ pub use programs::file_program;
 
 #[cfg(test)]
 fn assert_example_program(program_name: &str) {
+    println!("Testing program {}", program_name);
     let program = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
-    assert_ok(&program)
+    assert_ok(&program);
+    let program: Program = program.unwrap();
+    jit(&program.entry);
+    for (_, sub) in program.subroutines {
+        match sub.implementation {
+            Implementation::Block(block) => jit(&block),
+            _ => panic!("Inconceivable!"),
+        };
+    }
 }
 
 #[test]
@@ -132,8 +141,11 @@ fn test_file_programs() {
     assert_example_program("recursion");
     assert_example_program("loop");
     assert_example_program("generator");
+    assert_example_program("references/simple");
+    assert_example_program("references/lhs");
+    assert_example_program("collections/array");
+    assert_example_program("collections/hash");
 }
-
 
 #[test]
 fn test_program() {
@@ -141,9 +153,9 @@ fn test_program() {
         subroutines: HashMap::new(),
         entry: CompoundStatement {
             statement_list: StatementList::Sequence(
-                Statement::Assignment(VariableName(String::from("a")), Box::new(Expression::Lit(Literal::Number(5)))),
+                Statement::Assignment(Box::new(Expression::Var(VariableName(String::from("a")))), Box::new(Expression::Lit(Literal::Number(5)))),
                 Box::new(StatementList::Single(
-                    Statement::Assignment(VariableName(String::from("b")), Box::new(Expression::Var(VariableName(String::from("a")))))
+                    Statement::Assignment(Box::new(Expression::Var(VariableName(String::from("b")))), Box::new(Expression::Var(VariableName(String::from("a")))))
                 ))
             )
         }

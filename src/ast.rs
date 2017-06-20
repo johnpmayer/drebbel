@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
     Number(i64),
     Boolean(bool),
@@ -27,15 +27,10 @@ pub enum InfixBinaryOperator {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum AssignmentExpression {
-    Var(VariableName),
-    Deref(Box<AssignmentExpression>),
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Lit(Literal),
     Var(VariableName),
+    Subscript(Box<Expression>, Box<Expression>),
     ApplyUnOp(UnaryOperator, Box<Expression>),
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
     CallSubByValue(SubroutineName, Vec<Box<Expression>>),
@@ -49,7 +44,7 @@ pub enum Expression {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     EvaluateIgnore(Box<Expression>),
-    Assignment(AssignmentExpression, Box<Expression>),
+    Assignment(Box<Expression>, Box<Expression>),
     Return(Option<Box<Expression>>),
     Loop(Box<Expression>, Box<StatementList>),
     Conditional(Box<Expression>, Box<StatementList>, Box<StatementList>),
@@ -99,7 +94,7 @@ pub struct CompoundStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Builtin {
-    Print,
+    Print, NewArrayRef, NewHashRef
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,15 +1,18 @@
 
 use ast::*;
 use intermediate::*;
-// use std::rc::Rc;
-// use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use std::io::stdin;
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IndexValue {
+    Unit,
+    Number(i64),
+    Boolean(bool)
+}
 
 #[derive(Clone, Debug)]
 enum Value {
@@ -18,6 +21,26 @@ enum Value {
     Boolean(bool),
     Cont(Box<Continuation>),
     Ref(Rc<RefCell<Value>>),
+    ArrayRef(Rc<RefCell<Vec<Value>>>),
+    HashRef(Rc<RefCell<HashMap<IndexValue, Value>>>),
+}
+
+impl Value {
+    fn as_number(&self) -> Result<i64, ExecutionError> {
+        match self {
+            &Value::Number(n) => Ok(n),
+            _ => Err(ExecutionError::TypeError(format!("Not a number: {:?}", self)))
+        }
+    }
+
+    fn as_index(&self) -> Result<IndexValue, ExecutionError> {
+        match self {
+            &Value::Unit => Ok(IndexValue::Unit),
+            &Value::Number(n) => Ok(IndexValue::Number(n)),
+            &Value::Boolean(b) => Ok(IndexValue::Boolean(b)),
+            _ => Err(ExecutionError::TypeError(format!("Only Unit, Number, and Boolean can be used as indexes to hash ({:?})", self))),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -70,8 +93,50 @@ impl Frame {
         }
     }
 
-    fn assign(&mut self, target: &AssignTarget, value: Value) {
-        self.scope.insert(target.clone(), value);
+    fn assign(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
+        // TODO: kind of silly that this lives here
+        match target {
+            &AssignTarget::Variable(_) => {
+                self.scope.insert(target.clone(), value);
+                Ok(())
+            },
+            &AssignTarget::Register(_) => {
+                self.scope.insert(target.clone(), value);
+                Ok(())
+            },
+            &AssignTarget::Reference(ref reference_value_tgt) => {
+                let reference_value = self.get_value(reference_value_tgt)?;
+                match reference_value {
+                    Value::Ref(ref rc_value) => {
+                        *rc_value.borrow_mut() = value;
+                        Ok(())
+                    }
+                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign to dereferenced non-reference value."))),
+                }
+            },
+            &AssignTarget::AtIndex(ref object_value_tgt, ref index_value_tgt) => {
+                let object_value = self.get_value(object_value_tgt)?;
+                match object_value {
+                    Value::ArrayRef(ref rc) => {
+                        let idx_value = self.get_value(index_value_tgt)?.as_number()?;
+                        let mut vec = rc.borrow_mut();
+                        if idx_value < 0 || idx_value as usize > vec.len() {
+                            return Err(ExecutionError::ArrayIndexOutOfBounds(idx_value))
+                        } else {
+                            let index = idx_value as usize;
+                            vec[index] = value;
+                            Ok(())
+                        }
+                    },
+                    Value::HashRef(ref rc) => {
+                        let index_value = self.get_value(index_value_tgt)?.as_index()?;
+                        rc.borrow_mut().insert(index_value, value);
+                        Ok(())
+                    },
+                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign at index of non-object (array/hash) value."))),
+                }
+            }
+        }
     }
 
     fn assign_subroutine(&mut self, value: Value) -> Result<(), ExecutionError> {
@@ -79,7 +144,7 @@ impl Frame {
             None => return Err(ExecutionError::UnsetReturnTarget),
             Some(ref target) => target.clone()
         };
-        self.assign(&target, value);
+        self.assign(&target, value)?;
         self.call_target = None;
         self.running_continuation = None; // TODO: verify this is always correct...
         Ok(())
@@ -123,8 +188,7 @@ impl Stack {
 
     fn assign_current_frame(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.assign(target, value);
-            Ok(())
+            frame.assign(target, value)
         })
     }
 
@@ -216,6 +280,8 @@ pub enum ExecutionError {
     UnsetReturnTarget,
     StackUnderflow,
     UncaughtSuspension(Symbol),
+    ArrayIndexOutOfBounds(i64),
+    HashNoSuchElemtent(IndexValue),
 }
 
 fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
@@ -226,6 +292,10 @@ fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, Ex
             }
             Ok(Value::Unit)
         },
+        Builtin::NewArrayRef =>
+            Ok(Value::ArrayRef(Rc::new(RefCell::new(Vec::new())))),
+        Builtin::NewHashRef => 
+            Ok(Value::HashRef(Rc::new(RefCell::new(HashMap::new())))),
     }
 }
 
@@ -279,6 +349,31 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                 };
                 stack.assign_current_frame(assign_tgt, result)?;
             },
+            Instruction::IndexInto(ref assign_tgt, ref obj_value_tgt, ref idx_value_tgt) => {
+                let obj_value = stack.current_frame()?.get_value(obj_value_tgt)?;
+                let result = match obj_value {
+                    Value::ArrayRef(ref rc) => {
+                        let idx_value: i64 = stack.current_frame()?.get_value(idx_value_tgt)?.as_number()?;
+                        let vec = rc.borrow();
+                        if idx_value < 0 || idx_value as usize > vec.len() {
+                            return Err(ExecutionError::ArrayIndexOutOfBounds(idx_value))
+                        } else {
+                            let index = idx_value as usize;
+                            vec[index].clone()
+                        }
+                    },
+                    Value::HashRef(ref rc) => {
+                        let idx_value: IndexValue = stack.current_frame()?.get_value(idx_value_tgt)?.as_index()?;
+                        let hash = rc.borrow();
+                        match hash.get(&idx_value) {
+                            None => return Err(ExecutionError::HashNoSuchElemtent(idx_value)),
+                            Some(v) => v.clone()
+                        }
+                    },
+                    _ => return Err(ExecutionError::TypeError(format!("Only array refs and hash refs can be indexed into!"))),
+                };
+                stack.assign_current_frame(assign_tgt, result)?;
+            }
             Instruction::Return(value_tgt) => {
                 let value = match value_tgt {
                     None => Value::Unit,

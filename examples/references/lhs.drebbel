@@ -3,5 +3,11 @@ BEGIN
     n_ref := newref n;
     *n_ref := 7;
     n1 := *n_ref;
-    print(n1)
+    print(n1 == 7);
+    n_ref_ref := newref n_ref;
+    **n_ref_ref := 8;
+    n2 := **n_ref_ref;
+    print(n2 == 8);
+    n3 := *n_ref;
+    print(n3 == 8);
 END.

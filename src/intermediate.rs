@@ -4,17 +4,27 @@ use ast::*;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RegisterName(pub i64);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ValueTarget {
     Literal(Literal),
     Register(RegisterName),
     Variable(VariableName)
 }
 
+// TODO: Kind of silly that Reference (and subsequently ValueTarget) need to hashable...
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AssignTarget {
     Register(RegisterName),
-    Variable(VariableName)
+    Variable(VariableName),
+    Reference(ValueTarget),
+    AtIndex(ValueTarget, ValueTarget),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AssignmentExpression {
+    Var(VariableName),
+    Deref(Box<Expression>),
+    AtIndex(Box<Expression>, Box<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,6 +33,7 @@ pub enum InstructionTree {
     Assign(AssignTarget, ValueTarget),
     ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
     ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
+    IndexInto(AssignTarget, ValueTarget, ValueTarget),
     Conditional(ValueTarget, Box<InstructionTree>, Box<InstructionTree>),
     CompoundInstruction(Vec<InstructionTree>),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
@@ -64,6 +75,18 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( r_tree
                     , InstructionTree::ApplyUnOp(AssignTarget::Register(next_register.clone()), op.clone(), r_value)
+                    )
+            );
+            (ValueTarget::Register(next_register), tree)
+        },
+        &Expression::Subscript(ref obj_expr, ref idx_expr) => {
+            let (obj_value, obj_tree) = transform_expression(register_counter, obj_expr);
+            let (idx_value, idx_tree) = transform_expression(register_counter, idx_expr);
+            let next_register = next_register(register_counter);
+            let tree = InstructionTree::CompoundInstruction(
+                vec!( obj_tree
+                    , idx_tree
+                    , InstructionTree::IndexInto(AssignTarget::Register(next_register.clone()), obj_value, idx_value)
                     )
             );
             (ValueTarget::Register(next_register), tree)
@@ -156,18 +179,46 @@ fn transform_expression(register_counter: &mut i64,
     }
 }
 
+fn transform_assignment_expression(register_counter: &mut i64, assignment_expression: &AssignmentExpression) -> (AssignTarget, InstructionTree) {
+    match assignment_expression {
+        &AssignmentExpression::Var(ref variable_name) => (AssignTarget::Variable(variable_name.clone()), InstructionTree::Noop),
+        &AssignmentExpression::Deref(ref deref_assignment_expression) => {
+            let (expr_value_tgt, expr_tree) = transform_expression(register_counter, deref_assignment_expression);
+            (AssignTarget::Reference(expr_value_tgt), expr_tree)
+        },
+        &AssignmentExpression::AtIndex(ref obj_expression, ref idx_expression) => {
+            let (obj_value_tgt, obj_tree) = transform_expression(register_counter, obj_expression);
+            let (idx_value_tgt, idx_tree) = transform_expression(register_counter, idx_expression);
+            let tree = InstructionTree::CompoundInstruction(vec!( obj_tree, idx_tree));
+            (AssignTarget::AtIndex(obj_value_tgt, idx_value_tgt), tree)
+        }
+    }
+}
+
+fn validate_assignment_lhs(expression: &Expression) -> AssignmentExpression {
+    match expression {
+        &Expression::Var(ref var) => AssignmentExpression::Var(var.clone()),
+        &Expression::ApplyUnOp(UnaryOperator::Deref, ref expr) =>
+            AssignmentExpression::Deref(expr.clone()),
+        &Expression::Subscript(ref obj_expr, ref idx_expr) =>
+            AssignmentExpression::AtIndex(obj_expr.clone(), idx_expr.clone()),
+        _ => panic!("Invalid LHS expression: {:?}", expression),
+    }
+}
+
 fn transform_statement(register_counter: &mut i64, statement: &Statement) -> InstructionTree {
     match statement {
         &Statement::Empty => InstructionTree::Noop,
-        &Statement::Assignment(AssignmentExpression::Var(ref variable_name), ref expression) => {
-            let (value, expression_tree) = transform_expression(register_counter, expression);
+        &Statement::Assignment(ref lhs_expression, ref expression) => {
+            let assignment_expression = validate_assignment_lhs(lhs_expression);
+            let (assign_tgt, assignment_expression_tree) = transform_assignment_expression(register_counter, &assignment_expression);
+            let (value_tgt, expression_tree) = transform_expression(register_counter, expression);
             InstructionTree::CompoundInstruction(
                 vec!( expression_tree
-                    , InstructionTree::Assign(AssignTarget::Variable(variable_name.clone()), value))
+                    , assignment_expression_tree
+                    , InstructionTree::Assign(assign_tgt, value_tgt)
+                    )
             )
-        },
-        &Statement::Assignment(AssignmentExpression::Deref(ref ref_expression), ref expression) => {
-            panic!("TODO Assignment Deref")
         },
         &Statement::EvaluateIgnore(ref expression) => {
             let (_, tree) = transform_expression(register_counter, expression);
@@ -242,6 +293,7 @@ pub enum Instruction {
     Assign(AssignTarget, ValueTarget),
     ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
     ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
+    IndexInto(AssignTarget, ValueTarget, ValueTarget),
     ConditionalJumpRelative(ValueTarget, isize),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
@@ -268,6 +320,8 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
                 instructions.push(Instruction::ApplyUnOp(tgt, op, val)),
             InstructionTree::ApplyBinOp(tgt, l_val, op, r_val) =>
                 instructions.push(Instruction::ApplyBinOp(tgt, l_val, op, r_val)),
+            InstructionTree::IndexInto(tgt, obj_val, idx_val) =>
+                instructions.push(Instruction::IndexInto(tgt, obj_val, idx_val)),
 
             InstructionTree::Conditional(test_val, truthy_tree, falsey_tree) => {
                 let mut falsey_insns = flatten_instruction_tree(vec!(*falsey_tree));
