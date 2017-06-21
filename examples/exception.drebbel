@@ -2,7 +2,7 @@ SUB work (x)
 BEGIN
     IF x == 0
     THEN
-        SUSPEND err
+        SUSPEND :err
     ELSE
         print(x * 2)
     FI
@@ -20,8 +20,8 @@ BEGIN
 END.
 
 BEGIN
-    workA := CONT err work(5);
+    workA := CONT :err work(5);
     try(workA);
-    workB := CONT err work(0);
+    workB := CONT :err work(0);
     try(workB);
 END.

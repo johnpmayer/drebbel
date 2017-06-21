@@ -28,7 +28,7 @@ VariableName: VariableName = Identifier => VariableName(<>);
 
 SubroutineName: SubroutineName = Identifier => SubroutineName(<>);
 
-Symbol: Symbol = Identifier => Symbol(<>);
+Symbol: Symbol = ":" <id:Identifier> => Symbol(id);
 
 // Expressions with precedence rules (higher precedence earlier in the program)
 

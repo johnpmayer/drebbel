@@ -141,6 +141,7 @@ fn test_file_programs() {
     assert_example_program("recursion");
     assert_example_program("loop");
     assert_example_program("generator");
+    assert_example_program("exception");
     assert_example_program("references/simple");
     assert_example_program("references/lhs");
     assert_example_program("collections/array");

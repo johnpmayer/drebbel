@@ -2,13 +2,13 @@ SUB range (n)
 BEGIN
   a := 0;
   WHILE a < n DO
-    SUSPEND gen a;
+    SUSPEND :gen a;
     a := a + 1
   DONE
 END.
 
 BEGIN
-  gen := CONT gen range(5);
+  gen := CONT :gen range(5);
   gen := RUN gen;
   WHILE ! (ISDONE gen) DO
     print(LASTVALUE gen);
