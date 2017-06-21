@@ -19,7 +19,7 @@ enum Value {
     Unit,
     Number(i64),
     Boolean(bool),
-    Cont(Box<Continuation>),
+    ContRef(Rc<RefCell<Continuation>>),
     Ref(Rc<RefCell<Value>>),
     ArrayRef(Rc<RefCell<Vec<Value>>>),
     HashRef(Rc<RefCell<HashMap<IndexValue, Value>>>),
@@ -43,6 +43,8 @@ impl Value {
     }
 }
 
+// TODO: RUN should return a hash of last_value and done
+// PREREQ: Symbol values (with literals)
 #[derive(Clone)]
 struct Continuation {
     done: bool,
@@ -63,9 +65,11 @@ fn lookup_value(scope: &HashMap<AssignTarget, Value>, target: &AssignTarget) -> 
     }
 }
 
+// TODO: Reduce call_target and running_continuation
+// Three states: Active, RunningSubroutine(target), RunningContinuation(target, symbol, cont_ref)
 #[derive(Clone)]
 struct Frame {
-    running_continuation: Option<Symbol>,
+    running_continuation: Option<(Symbol, Rc<RefCell<Continuation>>)>,
     call_target: Option<AssignTarget>,
     instructions: Vec<Instruction>,
     program_counter: usize,
@@ -215,11 +219,14 @@ impl Stack {
                 } else {
                     let assign_value = match self.current_frame()?.running_continuation.clone() {
                         None => value,
-                        Some(_) => Value::Cont(Box::new(Continuation {
-                            done: true,
-                            last_value: value,
-                            frames: vec!(),
-                        })),
+                        Some((_, cont_rc)) => {
+                            *cont_rc.borrow_mut() = Continuation {
+                                done: true,
+                                last_value: value,
+                                frames: vec!(),
+                            };
+                            Value::Unit
+                        }
                     };
                     self.with_current_frame(|mut frame| frame.assign_subroutine(assign_value))?;
                     Ok(None)
@@ -237,12 +244,13 @@ impl Stack {
         Ok(())
     }
 
-    fn push_coroutine_frames(&mut self, assign_tgt: &AssignTarget, symbol: &Symbol, frames: &Vec<Frame>) -> Result<(), ExecutionError> {
+    fn push_coroutine_frames(&mut self, assign_tgt: &AssignTarget, symbol: &Symbol, cont_ref: Rc<RefCell<Continuation>>) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
             frame.call_target = Some(assign_tgt.clone());
-            frame.running_continuation = Some(symbol.clone());
+            frame.running_continuation = Some((symbol.clone(), cont_ref.clone()));
             Ok(())
         })?;
+        let frames = cont_ref.borrow().frames.clone();
         self.frames.extend_from_slice(frames.as_slice());
         Ok(())
     }
@@ -251,7 +259,7 @@ impl Stack {
         let innermost_symbol_frame_index = self.frames.iter().rposition(|ref frame| {
             match frame.running_continuation {
                 None => false,
-                Some(ref frame_symbol) => *frame_symbol == *symbol
+                Some((ref frame_symbol, _)) => *frame_symbol == *symbol
             }
         }).ok_or(ExecutionError::UncaughtSuspension(symbol.clone()))?;
         
@@ -261,10 +269,21 @@ impl Stack {
             last_value: value,
             frames: cont_frames
         };
-    
+
+        self.with_current_frame(|mut frame| {
+            match frame.running_continuation {
+                Some((_, ref cont_ref)) => {
+                    *cont_ref.borrow_mut() = continuation
+                },
+                None => return Err(ExecutionError::Inconceivable(format!("Split frame doesn't have a continuation reference"))),
+            }
+            frame.running_continuation = None;
+            Ok(())
+        })?;
+
         let cont_assign_target: AssignTarget = self.current_frame()?.call_target.clone().ok_or(ExecutionError::UnsetReturnTarget)?;
 
-        self.assign_current_frame(&cont_assign_target, Value::Cont(Box::new(continuation)))
+        self.assign_current_frame(&cont_assign_target, Value::Unit)
     }
 }
 
@@ -279,6 +298,7 @@ pub enum ExecutionError {
     UncaughtSuspension(Symbol),
     ArrayIndexOutOfBounds(i64),
     HashNoSuchElemtent(IndexValue),
+    Inconceivable(String),
 }
 
 fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
@@ -463,7 +483,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                     last_value: Value::Unit,
                                     frames: vec!(subroutine_frame),
                                 };
-                                stack.assign_current_frame(assign_tgt, Value::Cont(Box::new(continuation)))?
+                                stack.assign_current_frame(assign_tgt, Value::ContRef(Rc::new(RefCell::new(continuation))))?
                             }
                         }
                     },
@@ -471,16 +491,16 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             },
             Instruction::RunCont(ref assign_tgt, ref symbol, ref value_tgt) => {
                 let cont = match stack.current_frame()?.get_value(value_tgt)? {
-                    Value::Cont(cont) => cont,
+                    Value::ContRef(cont) => cont,
                     _ => return Err(ExecutionError::TypeError(format!("RUN can only be applied to continuation values"))),
                 };
-                stack.push_coroutine_frames(assign_tgt, symbol, &cont.frames)?;
+                stack.push_coroutine_frames(assign_tgt, symbol, cont)?;
                 continue
             },
             Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
                 let value = stack.current_frame()?.get_value(value_tgt)?;;
                 let done = match value {
-                    Value::Cont(cont) => cont.done,
+                    Value::ContRef(cont) => cont.borrow().done,
                     _ => return Err(ExecutionError::TypeError(format!("ISDONE can only be applied to continuation values"))),
                 };
                 stack.assign_current_frame(assign_tgt, Value::Boolean(done))?
@@ -488,7 +508,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
             Instruction::LastValueCont(ref assign_tgt, ref value_tgt) => {
                 let value = stack.current_frame()?.get_value(value_tgt)?;
                 let last_value = match value {
-                    Value::Cont(cont) => cont.last_value,
+                    Value::ContRef(cont) => cont.borrow().last_value.clone(),
                     _ => return Err(ExecutionError::TypeError(format!("LASTVALUE can only be applied to continuation values"))),
                 };
                 stack.assign_current_frame(assign_tgt, last_value)?

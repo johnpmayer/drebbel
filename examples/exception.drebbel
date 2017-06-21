@@ -10,7 +10,7 @@ END.
 
 SUB try (cont)
 BEGIN
-    cont := RUN :err cont;
+    RUN :err cont;
     IF ! (ISDONE cont)
     THEN
         print(-1)
