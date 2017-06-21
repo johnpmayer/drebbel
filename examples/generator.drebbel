@@ -8,10 +8,10 @@ BEGIN
 END.
 
 BEGIN
-  gen := CONT :gen range(5);
-  gen := RUN gen;
+  gen := CONT range(5);
+  gen := RUN :gen gen;
   WHILE ! (ISDONE gen) DO
     print(LASTVALUE gen);
-    gen := RUN gen
+    gen := RUN :gen gen
   DONE
 END.

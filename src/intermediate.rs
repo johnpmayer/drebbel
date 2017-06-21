@@ -39,8 +39,8 @@ pub enum InstructionTree {
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
     Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>),
-    MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
-    RunCont(AssignTarget, ValueTarget),
+    MakeCont(AssignTarget, SubroutineName, Vec<ValueTarget>),
+    RunCont(AssignTarget, Symbol, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
     LastValueCont(AssignTarget, ValueTarget),
     SuspendCont(Symbol, Option<ValueTarget>),
@@ -130,7 +130,7 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(instructions);
             (ValueTarget::Register(result_register), tree)
         },
-        &Expression::MakeCont(ref symbol, ref sub_name, ref arguments) => {
+        &Expression::MakeCont(ref sub_name, ref arguments) => {
             // TODO un-DRY with the CallSubByValue. just arguments -> instructions
             let mut instructions = Vec::new();
             let mut argument_values = Vec::new();
@@ -142,19 +142,18 @@ fn transform_expression(register_counter: &mut i64,
             let result_register = next_register(register_counter);
             let result_target = AssignTarget::Register(result_register.clone());
             instructions.push(InstructionTree::MakeCont(result_target,
-                                                        symbol.clone(),
                                                         sub_name.clone(),
                                                         argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
             (ValueTarget::Register(result_register), tree)
         },
-        &Expression::RunCont(ref expr) => {
+        &Expression::RunCont(ref symbol, ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
             let result_target = AssignTarget::Register(result_register.clone());
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
-                    , InstructionTree::RunCont(result_target, expr_value))
+                    , InstructionTree::RunCont(result_target, symbol.clone(), expr_value))
             );
             (ValueTarget::Register(result_register), tree)
         },
@@ -297,8 +296,8 @@ pub enum Instruction {
     ConditionalJumpRelative(ValueTarget, isize),
     CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
-    MakeCont(AssignTarget, Symbol, SubroutineName, Vec<ValueTarget>),
-    RunCont(AssignTarget, ValueTarget),
+    MakeCont(AssignTarget, SubroutineName, Vec<ValueTarget>),
+    RunCont(AssignTarget, Symbol, ValueTarget),
     IsDoneCont(AssignTarget, ValueTarget),
     LastValueCont(AssignTarget, ValueTarget),
     SuspendCont(Symbol, Option<ValueTarget>),
@@ -362,10 +361,10 @@ pub fn flatten_instruction_tree(instruction_tree: Vec<InstructionTree>) -> Vec<I
             InstructionTree::Return(val) =>
                 instructions.push(Instruction::Return(val)),
 
-            InstructionTree::MakeCont(tgt, symbol, sub_name, args) =>
-                instructions.push(Instruction::MakeCont(tgt, symbol, sub_name, args)),
-            InstructionTree::RunCont(tgt, val) =>
-                instructions.push(Instruction::RunCont(tgt, val)),
+            InstructionTree::MakeCont(tgt, sub_name, args) =>
+                instructions.push(Instruction::MakeCont(tgt, sub_name, args)),
+            InstructionTree::RunCont(tgt, symbol, val) =>
+                instructions.push(Instruction::RunCont(tgt, symbol, val)),
             InstructionTree::IsDoneCont(tgt, val) =>
                 instructions.push(Instruction::IsDoneCont(tgt, val)),
             InstructionTree::LastValueCont(tgt, val) =>

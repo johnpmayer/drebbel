@@ -35,8 +35,8 @@ pub enum Expression {
     ApplyInfixBinOp(Box<Expression>, InfixBinaryOperator, Box<Expression>),
     CallSubByValue(SubroutineName, Vec<Box<Expression>>),
     Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
-    MakeCont(Symbol, SubroutineName, Vec<Box<Expression>>),
-    RunCont(Box<Expression>),
+    MakeCont(SubroutineName, Vec<Box<Expression>>),
+    RunCont(Symbol, Box<Expression>),
     IsDoneCont(Box<Expression>),
     LastValueCont(Box<Expression>),
 }

@@ -46,14 +46,13 @@ impl Value {
 #[derive(Clone)]
 struct Continuation {
     done: bool,
-    symbol: Symbol,
     last_value: Value,
     frames: Vec<Frame>,
 }
 
 impl Debug for Continuation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Continuation({:?})", self.symbol)
+        write!(f, "Continuation")
     }
 }
 
@@ -216,9 +215,8 @@ impl Stack {
                 } else {
                     let assign_value = match self.current_frame()?.running_continuation.clone() {
                         None => value,
-                        Some(ref symbol) => Value::Cont(Box::new(Continuation {
+                        Some(_) => Value::Cont(Box::new(Continuation {
                             done: true,
-                            symbol: symbol.clone(),
                             last_value: value,
                             frames: vec!(),
                         })),
@@ -260,7 +258,6 @@ impl Stack {
         let cont_frames = self.frames.split_off(innermost_symbol_frame_index + 1);
         let continuation = Continuation {
             done: false,
-            symbol: symbol.clone(),
             last_value: value,
             frames: cont_frames
         };
@@ -434,7 +431,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     }
                 }
             },
-            Instruction::MakeCont(ref assign_tgt, ref symbol, ref sub_name, ref argument_targets) => {
+            Instruction::MakeCont(ref assign_tgt, ref sub_name, ref argument_targets) => {
                 let argument_values: Result<Vec<Value>, ExecutionError> = argument_targets.iter().map(|ref target| {
                     stack.current_frame()?.get_value(target)
                 }).collect();
@@ -463,7 +460,6 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                 };
                                 let continuation = Continuation {
                                     done: false,
-                                    symbol: symbol.clone(),
                                     last_value: Value::Unit,
                                     frames: vec!(subroutine_frame),
                                 };
@@ -473,12 +469,12 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     },
                 }
             },
-            Instruction::RunCont(ref assign_tgt, ref value_tgt) => {
+            Instruction::RunCont(ref assign_tgt, ref symbol, ref value_tgt) => {
                 let cont = match stack.current_frame()?.get_value(value_tgt)? {
                     Value::Cont(cont) => cont,
                     _ => return Err(ExecutionError::TypeError(format!("RUN can only be applied to continuation values"))),
                 };
-                stack.push_coroutine_frames(assign_tgt, &cont.symbol, &cont.frames)?;
+                stack.push_coroutine_frames(assign_tgt, symbol, &cont.frames)?;
                 continue
             },
             Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
