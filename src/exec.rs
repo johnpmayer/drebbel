@@ -11,7 +11,8 @@ use std::cell::RefCell;
 pub enum IndexValue {
     Unit,
     Number(i64),
-    Boolean(bool)
+    Boolean(bool),
+    Symbol(Symbol),
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +20,7 @@ enum Value {
     Unit,
     Number(i64),
     Boolean(bool),
+    Symbol(Symbol),
     ContRef(Rc<RefCell<Continuation>>),
     Ref(Rc<RefCell<Value>>),
     ArrayRef(Rc<RefCell<Vec<Value>>>),
@@ -38,6 +40,7 @@ impl Value {
             &Value::Unit => Ok(IndexValue::Unit),
             &Value::Number(n) => Ok(IndexValue::Number(n)),
             &Value::Boolean(b) => Ok(IndexValue::Boolean(b)),
+            &Value::Symbol(ref s) => Ok(IndexValue::Symbol(s.clone())),
             _ => Err(ExecutionError::TypeError(format!("Only Unit, Number, and Boolean can be used as indexes to hash ({:?})", self))),
         }
     }
@@ -126,6 +129,7 @@ impl Frame {
         match target {
             &ValueTarget::Literal(Literal::Number(i)) => Ok(Value::Number(i)),
             &ValueTarget::Literal(Literal::Boolean(b)) => Ok(Value::Boolean(b)),
+            &ValueTarget::Literal(Literal::Symbol(ref s)) => Ok(Value::Symbol(s.clone())),
             &ValueTarget::Local(ref id) => lookup_value(&self.scope, id),
         }
     }

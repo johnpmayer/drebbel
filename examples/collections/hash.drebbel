@@ -1,6 +1,11 @@
 BEGIN
     arr := newHashRef();
+
     arr[0] := 42;
     x := arr[0];
-    print(x)
+    print(x);
+
+    arr[:foo] := 10;
+    y := arr[:foo];
+    print(y);
 END.

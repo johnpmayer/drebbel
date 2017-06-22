@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub enum Literal {
     Number(i64),
     Boolean(bool),
+    Symbol(Symbol),
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
