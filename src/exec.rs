@@ -65,12 +65,16 @@ fn lookup_value(scope: &HashMap<Identifier, Value>, target: &Identifier) -> Resu
     }
 }
 
-// TODO: Reduce call_target and running_continuation
-// Three states: Active, RunningSubroutine(target), RunningContinuation(target, symbol, cont_ref)
+#[derive(Clone)]
+enum FrameState {
+    Active,
+    RunningSubroutine(Identifier),
+    RunningContinuation(Identifier, Symbol, Rc<RefCell<Continuation>>),
+}
+
 #[derive(Clone)]
 struct Frame {
-    running_continuation: Option<(Symbol, Rc<RefCell<Continuation>>)>,
-    call_target: Option<Identifier>,
+    state: FrameState,
     instructions: Vec<Instruction>,
     program_counter: usize,
     scope: HashMap<Identifier, Value>,
@@ -79,8 +83,7 @@ struct Frame {
 impl Frame {
     fn new(instructions: Vec<Instruction>) -> Self {
         Frame {
-            running_continuation: None,
-            call_target: None,
+            state: FrameState::Active,
             instructions: instructions,
             program_counter: 0,
             scope: HashMap::new(),
@@ -100,18 +103,25 @@ impl Frame {
         self.scope.insert(id.clone(), value);
     }
 
-    fn assign_subroutine(&mut self, value: Value) -> Result<(), ExecutionError> {
-        let target = match self.call_target {
-            None => return Err(ExecutionError::UnsetReturnTarget),
-            Some(ref target) => target.clone()
+    fn on_pop(&mut self, value: Value) -> Result<(), ExecutionError> {
+        match self.state {
+            FrameState::Active => return Err(ExecutionError::UnsetReturnTarget),
+            FrameState::RunningSubroutine(ref id) => {
+                self.scope.insert(id.clone(), value);
+            },
+            FrameState::RunningContinuation(ref id, _, ref rc_cont) => {
+                *rc_cont.borrow_mut() = Continuation {
+                    done: true,
+                    last_value: value,
+                    frames: vec!(),
+                };
+                self.scope.insert(id.clone(), Value::Unit);
+            },
         };
-        self.assign_local(&target, value);
-        self.call_target = None;
-        self.running_continuation = None; // TODO: verify this is always correct...
+        self.state = FrameState::Active;
         Ok(())
     }
 
-    // TODO: maybe better to use Rc<Value> here?
     fn get_value(&self, target: &ValueTarget) -> Result<Value, ExecutionError> {
         match target {
             &ValueTarget::Literal(Literal::Number(i)) => Ok(Value::Number(i)),
@@ -216,18 +226,7 @@ impl Stack {
                 if self.frames.is_empty() {
                     Ok(Some(exited_frame))
                 } else {
-                    let assign_value = match self.current_frame()?.running_continuation.clone() {
-                        None => value,
-                        Some((_, cont_rc)) => {
-                            *cont_rc.borrow_mut() = Continuation {
-                                done: true,
-                                last_value: value,
-                                frames: vec!(),
-                            };
-                            Value::Unit
-                        }
-                    };
-                    self.with_current_frame(|mut frame| frame.assign_subroutine(assign_value))?;
+                    self.with_current_frame(|mut frame| frame.on_pop(value))?;
                     Ok(None)
                 }
             },
@@ -236,7 +235,7 @@ impl Stack {
 
     fn push_subroutine_frame(&mut self, assign_id: &Identifier, frame: Frame) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.call_target = Some(assign_id.clone());
+            frame.state = FrameState::RunningSubroutine(assign_id.clone());
             Ok(())
         })?;
         self.frames.push(frame);
@@ -245,10 +244,10 @@ impl Stack {
 
     fn push_coroutine_frames(&mut self, assign_id: &Identifier, symbol: &Symbol, cont_ref: Rc<RefCell<Continuation>>) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.call_target = Some(assign_id.clone());
-            frame.running_continuation = Some((symbol.clone(), cont_ref.clone()));
+            frame.state = FrameState::RunningContinuation(assign_id.clone(), symbol.clone(), cont_ref.clone());
             Ok(())
         })?;
+        // I don't like cloning the frames here, makes more sense to "swap", and "replace" on an unwind or pop
         let frames = cont_ref.borrow().frames.clone();
         self.frames.extend_from_slice(frames.as_slice());
         Ok(())
@@ -256,9 +255,9 @@ impl Stack {
 
     fn unwind_coroutine(&mut self, symbol: &Symbol, value: Value) -> Result<(), ExecutionError> {
         let innermost_symbol_frame_index = self.frames.iter().rposition(|ref frame| {
-            match frame.running_continuation {
-                None => false,
-                Some((ref frame_symbol, _)) => *frame_symbol == *symbol
+            match frame.state {
+                FrameState::RunningContinuation(_, ref frame_symbol, _) => *frame_symbol == *symbol,
+                _ => false,
             }
         }).ok_or(ExecutionError::UncaughtSuspension(symbol.clone()))?;
         
@@ -270,19 +269,17 @@ impl Stack {
         };
 
         self.with_current_frame(|mut frame| {
-            match frame.running_continuation {
-                Some((_, ref cont_ref)) => {
-                    *cont_ref.borrow_mut() = continuation
+            let id = match frame.state {
+                FrameState::RunningContinuation(ref id, _, ref cont_ref) => {
+                    *cont_ref.borrow_mut() = continuation;
+                    id.clone()
                 },
-                None => return Err(ExecutionError::Inconceivable(format!("Split frame doesn't have a continuation reference"))),
-            }
-            frame.running_continuation = None;
+                _ => return Err(ExecutionError::Inconceivable(format!("Split frame wasn't running a continuation?"))),
+            };
+            frame.state = FrameState::Active;
+            frame.assign_local(&id, Value::Unit);
             Ok(())
-        })?;
-
-        let cont_assign_target: Identifier = self.current_frame()?.call_target.clone().ok_or(ExecutionError::UnsetReturnTarget)?;
-
-        self.assign_current_frame(&cont_assign_target, Value::Unit)
+        })
     }
 }
 
@@ -470,8 +467,7 @@ pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
                                     jit(compound_statement)
                                 }).clone();
                                 let subroutine_frame = Frame {
-                                    call_target: None,
-                                    running_continuation: None,
+                                    state: FrameState::Active,
                                     instructions: subroutine_instructions,
                                     program_counter: 0,
                                     scope: subroutine_scope,
@@ -504,8 +500,7 @@ pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
                                     jit(compound_statement)
                                 }).clone();
                                 let subroutine_frame = Frame {
-                                    call_target: None,
-                                    running_continuation: None,
+                                    state: FrameState::Active,
                                     instructions: subroutine_instructions,
                                     program_counter: 0,
                                     scope: subroutine_scope,
