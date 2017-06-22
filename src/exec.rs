@@ -58,7 +58,7 @@ impl Debug for Continuation {
     }
 }
 
-fn lookup_value(scope: &HashMap<AssignTarget, Value>, target: &AssignTarget) -> Result<Value, ExecutionError> {
+fn lookup_value(scope: &HashMap<Identifier, Value>, target: &Identifier) -> Result<Value, ExecutionError> {
     match scope.get(target) {
         None => Err(ExecutionError::NotInScope(target.clone())),
         Some(value) => Ok(value.clone()),
@@ -73,7 +73,7 @@ struct Frame {
     call_target: Option<AssignTarget>,
     instructions: Vec<Instruction>,
     program_counter: usize,
-    scope: HashMap<AssignTarget, Value>,
+    scope: HashMap<Identifier, Value>,
 }
 
 impl Frame {
@@ -98,13 +98,10 @@ impl Frame {
 
     fn assign(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
         // TODO: kind of silly that this lives here
+        // The first two make sense, they are 'stack identifiers', but the others don't need to mutate the scope
         match target {
-            &AssignTarget::Variable(_) => {
-                self.scope.insert(target.clone(), value);
-                Ok(())
-            },
-            &AssignTarget::Register(_) => {
-                self.scope.insert(target.clone(), value);
+            &AssignTarget::Local(ref id) => {
+                self.scope.insert(id.clone(), value);
                 Ok(())
             },
             &AssignTarget::Reference(ref reference_value_tgt) => {
@@ -158,8 +155,7 @@ impl Frame {
         match target {
             &ValueTarget::Literal(Literal::Number(i)) => Ok(Value::Number(i)),
             &ValueTarget::Literal(Literal::Boolean(b)) => Ok(Value::Boolean(b)),
-            &ValueTarget::Register(ref reg) => lookup_value(&self.scope, &AssignTarget::Register(reg.clone())),
-            &ValueTarget::Variable(ref var) => lookup_value(&self.scope, &AssignTarget::Variable(var.clone())),
+            &ValueTarget::Local(ref id) => lookup_value(&self.scope, id),
         }
     }
 }
@@ -289,7 +285,7 @@ impl Stack {
 
 #[derive(Debug)]
 pub enum ExecutionError {
-    NotInScope(AssignTarget),
+    NotInScope(Identifier),
     UnknownSubroutine(SubroutineName),
     TypeError(String),
     JumpOutOfBounds,
@@ -414,6 +410,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                     continue;
                 }
             },
+            // TODO DRY call subroutine and make continuation
             Instruction::CallSubroutine(ref assign_tgt, ref sub_name, ref argument_targets) => {
                 let argument_values: Result<Vec<Value>, ExecutionError> = argument_targets.iter().map(|ref target| {
                     stack.current_frame()?.get_value(target)
@@ -431,8 +428,8 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                                 stack.assign_current_frame(assign_tgt, value)?
                             }
                             Implementation::Block(ref compound_statement) => {
-                                let subroutine_scope: HashMap<AssignTarget, Value> = subroutine.arguments.iter().map(|arg_name| {
-                                    AssignTarget::Variable(arg_name.clone())
+                                let subroutine_scope: HashMap<Identifier, Value> = subroutine.arguments.iter().map(|arg_name| {
+                                    Identifier::Variable(arg_name.clone())
                                 }).zip(argument_values).collect();
                                 let subroutine_instructions = subroutine_instruction_cache.entry(sub_name.clone()).or_insert({
                                     jit(compound_statement)
@@ -465,8 +462,8 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
                         match subroutine.implementation {
                             Implementation::Builtin(_) => panic!("Can't create continuation of a builtin"),
                             Implementation::Block(ref compound_statement) => {
-                                let subroutine_scope: HashMap<AssignTarget, Value> = subroutine.arguments.iter().map(|arg_name| {
-                                    AssignTarget::Variable(arg_name.clone())
+                                let subroutine_scope: HashMap<Identifier, Value> = subroutine.arguments.iter().map(|arg_name| {
+                                    Identifier::Variable(arg_name.clone())
                                 }).zip(argument_values).collect();
                                 let subroutine_instructions = subroutine_instruction_cache.entry(sub_name.clone()).or_insert({
                                     jit(compound_statement)

@@ -1,25 +1,54 @@
 
 use ast::*;
 
+// TODO impl copy, get rid of clone?
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RegisterName(pub i64);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ValueTarget {
-    Literal(Literal),
-    Register(RegisterName),
-    Variable(VariableName)
-}
-
-// TODO: Kind of silly that Reference (and subsequently ValueTarget) need to hashable...
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AssignTarget {
+pub enum Identifier {
     Register(RegisterName),
     Variable(VariableName),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueTarget {
+    Literal(Literal),
+    Local(Identifier),
+}
+
+impl ValueTarget {
+    pub fn lit(literal: &Literal) -> ValueTarget {
+        ValueTarget::Literal(literal.clone())
+    }
+
+    pub fn reg(reg_name: &RegisterName) -> ValueTarget {
+        ValueTarget::Local(Identifier::Register(reg_name.clone()))
+    }
+
+    pub fn var(var_name: &VariableName) -> ValueTarget {
+        ValueTarget::Local(Identifier::Variable(var_name.clone()))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum AssignTarget {
+    Local(Identifier),
     Reference(ValueTarget),
     AtIndex(ValueTarget, ValueTarget),
 }
 
+impl AssignTarget {
+    pub fn reg(register: &RegisterName) -> AssignTarget {
+        AssignTarget::Local(Identifier::Register(register.clone()))
+    }
+
+    pub fn var(var_name: &VariableName) -> AssignTarget {
+        AssignTarget::Local(Identifier::Variable(var_name.clone()))
+    }
+}
+
+// TODO: can this intermediate type be removed by combining the transform functions?
 #[derive(Clone, Debug, PartialEq)]
 pub enum AssignmentExpression {
     Var(VariableName),
@@ -27,7 +56,7 @@ pub enum AssignmentExpression {
     AtIndex(Box<Expression>, Box<Expression>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum InstructionTree {
     Noop,
     Assign(AssignTarget, ValueTarget),
@@ -55,8 +84,8 @@ fn next_register(register_counter: &mut i64) -> RegisterName {
 fn transform_expression(register_counter: &mut i64,
                         expression: &Expression) -> (ValueTarget, InstructionTree) {
     match expression {
-        &Expression::Lit(ref lit) => (ValueTarget::Literal(lit.clone()), InstructionTree::Noop),
-        &Expression::Var(ref var) => (ValueTarget::Variable(var.clone()), InstructionTree::Noop),
+        &Expression::Lit(ref lit) => (ValueTarget::lit(lit), InstructionTree::Noop),
+        &Expression::Var(ref var) => (ValueTarget::var(var), InstructionTree::Noop),
         &Expression::ApplyInfixBinOp(ref l_expr, ref op, ref r_expr) => {
             let (l_value, l_tree) = transform_expression(register_counter, l_expr);
             let (r_value, r_tree) = transform_expression(register_counter, r_expr);
@@ -64,20 +93,20 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( l_tree
                     , r_tree
-                    , InstructionTree::ApplyBinOp(AssignTarget::Register(next_register.clone()), l_value, op.clone(), r_value)
+                    , InstructionTree::ApplyBinOp(AssignTarget::reg(&next_register), l_value, op.clone(), r_value)
                     )
             );
-            (ValueTarget::Register(next_register), tree)
+            (ValueTarget::reg(&next_register), tree)
         },
         &Expression::ApplyUnOp(ref op, ref r_expr) => {
             let (r_value, r_tree) = transform_expression(register_counter, r_expr);
             let next_register = next_register(register_counter);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( r_tree
-                    , InstructionTree::ApplyUnOp(AssignTarget::Register(next_register.clone()), op.clone(), r_value)
+                    , InstructionTree::ApplyUnOp(AssignTarget::reg(&next_register), op.clone(), r_value)
                     )
             );
-            (ValueTarget::Register(next_register), tree)
+            (ValueTarget::reg(&next_register), tree)
         },
         &Expression::Subscript(ref obj_expr, ref idx_expr) => {
             let (obj_value, obj_tree) = transform_expression(register_counter, obj_expr);
@@ -86,15 +115,15 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( obj_tree
                     , idx_tree
-                    , InstructionTree::IndexInto(AssignTarget::Register(next_register.clone()), obj_value, idx_value)
+                    , InstructionTree::IndexInto(AssignTarget::reg(&next_register), obj_value, idx_value)
                     )
             );
-            (ValueTarget::Register(next_register), tree)
+            (ValueTarget::reg(&next_register), tree)
         },
         &Expression::Conditional(ref test_expr, ref truthy_expr, ref falsey_expr) => {
             let (test_value, test_tree) = transform_expression(register_counter, test_expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             let (truthy_value, truthy_tree) = transform_expression(register_counter, truthy_expr);
             let (falsey_value, falsey_tree) = transform_expression(register_counter, falsey_expr);
             let tree = InstructionTree::CompoundInstruction(
@@ -112,7 +141,7 @@ fn transform_expression(register_counter: &mut i64,
                         )
                     )
             );
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
         &Expression::CallSubByValue(ref sub_name, ref arguments) => {
             let mut instructions = Vec::new();
@@ -123,12 +152,12 @@ fn transform_expression(register_counter: &mut i64,
                 argument_values.push(arg_value.clone())
             }
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             instructions.push(InstructionTree::CallSubroutine(result_target,
                                                               sub_name.clone(),
                                                               argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
         &Expression::MakeCont(ref sub_name, ref arguments) => {
             // TODO un-DRY with the CallSubByValue. just arguments -> instructions
@@ -140,47 +169,47 @@ fn transform_expression(register_counter: &mut i64,
                 argument_values.push(arg_value.clone())
             }
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             instructions.push(InstructionTree::MakeCont(result_target,
                                                         sub_name.clone(),
                                                         argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
         &Expression::RunCont(ref symbol, ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
                     , InstructionTree::RunCont(result_target, symbol.clone(), expr_value))
             );
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
         &Expression::IsDoneCont(ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
                     , InstructionTree::IsDoneCont(result_target, expr_value)));
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
         &Expression::LastValueCont(ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::Register(result_register.clone());
+            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
                     , InstructionTree::LastValueCont(result_target, expr_value)));
-            (ValueTarget::Register(result_register), tree)
+            (ValueTarget::reg(&result_register), tree)
         },
     }
 }
 
 fn transform_assignment_expression(register_counter: &mut i64, assignment_expression: &AssignmentExpression) -> (AssignTarget, InstructionTree) {
     match assignment_expression {
-        &AssignmentExpression::Var(ref variable_name) => (AssignTarget::Variable(variable_name.clone()), InstructionTree::Noop),
+        &AssignmentExpression::Var(ref variable_name) => (AssignTarget::var(variable_name), InstructionTree::Noop),
         &AssignmentExpression::Deref(ref deref_assignment_expression) => {
             let (expr_value_tgt, expr_tree) = transform_expression(register_counter, deref_assignment_expression);
             (AssignTarget::Reference(expr_value_tgt), expr_tree)
