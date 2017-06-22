@@ -109,8 +109,6 @@ Expression5: Box<Expression> = {
     "IFE" <expr_test:Expression> "THEN" <expr_true:Expression> "ELSE" <expr_false:Expression4> "EFI" =>
         Box::new(Expression::Conditional(expr_test, expr_true, expr_false)),
     "RUN" <symbol:Symbol> <cont:Expression> => Box::new(Expression::RunCont(symbol, cont)),
-    "ISDONE" <cont:Expression4> => Box::new(Expression::IsDoneCont(cont)),
-    "LASTVALUE" <cont:Expression4> => Box::new(Expression::LastValueCont(cont)),
     Expression4,
 };
 

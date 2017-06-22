@@ -46,13 +46,19 @@ impl Value {
     }
 }
 
-// TODO: RUN should return a hash of last_value and done
-// PREREQ: Symbol values (with literals)
 #[derive(Clone)]
 struct Continuation {
-    done: bool,
-    last_value: Value,
     frames: Vec<Frame>,
+}
+
+
+impl Continuation {
+    fn status_hash(done: bool, last: Value) -> Value {
+        let mut hash = HashMap::new();
+        hash.insert(IndexValue::Symbol(Symbol(String::from("done"))), Value::Boolean(done));
+        hash.insert(IndexValue::Symbol(Symbol(String::from("last"))), last);
+        Value::HashRef(Rc::new(RefCell::new(hash)))
+    }
 }
 
 impl Debug for Continuation {
@@ -114,11 +120,9 @@ impl Frame {
             },
             FrameState::RunningContinuation(ref id, _, ref rc_cont) => {
                 *rc_cont.borrow_mut() = Continuation {
-                    done: true,
-                    last_value: value,
                     frames: vec!(),
                 };
-                self.scope.insert(id.clone(), Value::Unit);
+                self.scope.insert(id.clone(), Continuation::status_hash(true, value));
             },
         };
         self.state = FrameState::Active;
@@ -266,22 +270,19 @@ impl Stack {
         }).ok_or(ExecutionError::UncaughtSuspension(symbol.clone()))?;
         
         let cont_frames = self.frames.split_off(innermost_symbol_frame_index + 1);
-        let continuation = Continuation {
-            done: false,
-            last_value: value,
-            frames: cont_frames
-        };
-
+        
         self.with_current_frame(|mut frame| {
             let id = match frame.state {
                 FrameState::RunningContinuation(ref id, _, ref cont_ref) => {
-                    *cont_ref.borrow_mut() = continuation;
+                    *cont_ref.borrow_mut() = Continuation {
+                        frames: cont_frames
+                    };
                     id.clone()
                 },
                 _ => return Err(ExecutionError::Inconceivable(format!("Split frame wasn't running a continuation?"))),
             };
             frame.state = FrameState::Active;
-            frame.assign_local(&id, Value::Unit);
+            frame.assign_local(&id, Continuation::status_hash(false, value));
             Ok(())
         })
     }
@@ -510,8 +511,6 @@ pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
                                     scope: subroutine_scope,
                                 };
                                 let continuation = Continuation {
-                                    done: false,
-                                    last_value: Value::Unit,
                                     frames: vec!(subroutine_frame),
                                 };
                                 stack.assign_current_frame(assign_tgt, Value::ContRef(Rc::new(RefCell::new(continuation))))?
@@ -527,22 +526,6 @@ pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
                 };
                 stack.push_coroutine_frames(assign_tgt, symbol, cont)?;
                 continue
-            },
-            Instruction::IsDoneCont(ref assign_tgt, ref value_tgt) => {
-                let value = stack.current_frame()?.get_value(value_tgt)?;;
-                let done = match value {
-                    Value::ContRef(cont) => cont.borrow().done,
-                    _ => return Err(ExecutionError::TypeError(format!("ISDONE can only be applied to continuation values"))),
-                };
-                stack.assign_current_frame(assign_tgt, Value::Boolean(done))?
-            },
-            Instruction::LastValueCont(ref assign_tgt, ref value_tgt) => {
-                let value = stack.current_frame()?.get_value(value_tgt)?;
-                let last_value = match value {
-                    Value::ContRef(cont) => cont.borrow().last_value.clone(),
-                    _ => return Err(ExecutionError::TypeError(format!("LASTVALUE can only be applied to continuation values"))),
-                };
-                stack.assign_current_frame(assign_tgt, last_value)?
             },
             Instruction::SuspendCont(ref symbol, ref value_tgt) => {
                 let value: Value = match value_tgt {

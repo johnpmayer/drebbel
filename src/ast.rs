@@ -38,8 +38,6 @@ pub enum Expression {
     Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
     MakeCont(SubroutineName, Vec<Box<Expression>>),
     RunCont(Symbol, Box<Expression>),
-    IsDoneCont(Box<Expression>),
-    LastValueCont(Box<Expression>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

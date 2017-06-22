@@ -10,12 +10,12 @@ END.
 
 SUB try (cont)
 BEGIN
-    RUN :err cont;
-    IF ! (ISDONE cont)
+    status := RUN :err cont;
+    IF ! status[:done]
     THEN
         print(-1)
     ELSE
-        RETURN (LASTVALUE cont)
+        RETURN status[:last]
     FI
 END.
 
