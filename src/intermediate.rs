@@ -60,25 +60,25 @@ pub enum AssignmentExpression {
 pub enum InstructionTree {
     Noop,
     Assign(AssignTarget, ValueTarget),
-    ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
-    ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
-    IndexInto(AssignTarget, ValueTarget, ValueTarget),
+    ApplyUnOp(Identifier, UnaryOperator, ValueTarget),
+    ApplyBinOp(Identifier, ValueTarget, InfixBinaryOperator, ValueTarget),
+    IndexInto(Identifier, ValueTarget, ValueTarget),
     Conditional(ValueTarget, Box<InstructionTree>, Box<InstructionTree>),
     CompoundInstruction(Vec<InstructionTree>),
-    CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
+    CallSubroutine(Identifier, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
     Loop(Box<InstructionTree>, ValueTarget, Vec<InstructionTree>),
-    MakeCont(AssignTarget, SubroutineName, Vec<ValueTarget>),
-    RunCont(AssignTarget, Symbol, ValueTarget),
-    IsDoneCont(AssignTarget, ValueTarget),
-    LastValueCont(AssignTarget, ValueTarget),
+    MakeCont(Identifier, SubroutineName, Vec<ValueTarget>),
+    RunCont(Identifier, Symbol, ValueTarget),
+    IsDoneCont(Identifier, ValueTarget),
+    LastValueCont(Identifier, ValueTarget),
     SuspendCont(Symbol, Option<ValueTarget>),
 }
 
-fn next_register(register_counter: &mut i64) -> RegisterName {
+fn next_register(register_counter: &mut i64) -> Identifier {
     let next_register = RegisterName(*register_counter);
     *register_counter += 1;
-    next_register
+    Identifier::Register(next_register)
 }
 
 fn transform_expression(register_counter: &mut i64,
@@ -93,20 +93,20 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( l_tree
                     , r_tree
-                    , InstructionTree::ApplyBinOp(AssignTarget::reg(&next_register), l_value, op.clone(), r_value)
+                    , InstructionTree::ApplyBinOp(next_register.clone(), l_value, op.clone(), r_value)
                     )
             );
-            (ValueTarget::reg(&next_register), tree)
+            (ValueTarget::Local(next_register), tree)
         },
         &Expression::ApplyUnOp(ref op, ref r_expr) => {
             let (r_value, r_tree) = transform_expression(register_counter, r_expr);
             let next_register = next_register(register_counter);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( r_tree
-                    , InstructionTree::ApplyUnOp(AssignTarget::reg(&next_register), op.clone(), r_value)
+                    , InstructionTree::ApplyUnOp(next_register.clone(), op.clone(), r_value)
                     )
             );
-            (ValueTarget::reg(&next_register), tree)
+            (ValueTarget::Local(next_register), tree)
         },
         &Expression::Subscript(ref obj_expr, ref idx_expr) => {
             let (obj_value, obj_tree) = transform_expression(register_counter, obj_expr);
@@ -115,18 +115,19 @@ fn transform_expression(register_counter: &mut i64,
             let tree = InstructionTree::CompoundInstruction(
                 vec!( obj_tree
                     , idx_tree
-                    , InstructionTree::IndexInto(AssignTarget::reg(&next_register), obj_value, idx_value)
+                    , InstructionTree::IndexInto(next_register.clone(), obj_value, idx_value)
                     )
             );
-            (ValueTarget::reg(&next_register), tree)
+            (ValueTarget::Local(next_register), tree)
         },
         &Expression::Conditional(ref test_expr, ref truthy_expr, ref falsey_expr) => {
             let (test_value, test_tree) = transform_expression(register_counter, test_expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
+            let result_target = AssignTarget::Local(result_register.clone());
             let (truthy_value, truthy_tree) = transform_expression(register_counter, truthy_expr);
             let (falsey_value, falsey_tree) = transform_expression(register_counter, falsey_expr);
             let tree = InstructionTree::CompoundInstruction(
+                // Seems wrong that test_value is required for conditional?
                 vec!( test_tree
                     , InstructionTree::Conditional(
                         test_value,
@@ -141,7 +142,7 @@ fn transform_expression(register_counter: &mut i64,
                         )
                     )
             );
-            (ValueTarget::reg(&result_register), tree)
+            (ValueTarget::Local(result_register), tree)
         },
         &Expression::CallSubByValue(ref sub_name, ref arguments) => {
             let mut instructions = Vec::new();
@@ -152,12 +153,11 @@ fn transform_expression(register_counter: &mut i64,
                 argument_values.push(arg_value.clone())
             }
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
-            instructions.push(InstructionTree::CallSubroutine(result_target,
+            instructions.push(InstructionTree::CallSubroutine(result_register.clone(),
                                                               sub_name.clone(),
                                                               argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
-            (ValueTarget::reg(&result_register), tree)
+            (ValueTarget::Local(result_register), tree)
         },
         &Expression::MakeCont(ref sub_name, ref arguments) => {
             // TODO un-DRY with the CallSubByValue. just arguments -> instructions
@@ -169,40 +169,36 @@ fn transform_expression(register_counter: &mut i64,
                 argument_values.push(arg_value.clone())
             }
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
-            instructions.push(InstructionTree::MakeCont(result_target,
+            instructions.push(InstructionTree::MakeCont(result_register.clone(),
                                                         sub_name.clone(),
                                                         argument_values));
             let tree = InstructionTree::CompoundInstruction(instructions);
-            (ValueTarget::reg(&result_register), tree)
+            (ValueTarget::Local(result_register), tree)
         },
         &Expression::RunCont(ref symbol, ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
-                    , InstructionTree::RunCont(result_target, symbol.clone(), expr_value))
+                    , InstructionTree::RunCont(result_register.clone(), symbol.clone(), expr_value))
             );
-            (ValueTarget::reg(&result_register), tree)
+            (ValueTarget::Local(result_register), tree)
         },
         &Expression::IsDoneCont(ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
-                    , InstructionTree::IsDoneCont(result_target, expr_value)));
-            (ValueTarget::reg(&result_register), tree)
+                    , InstructionTree::IsDoneCont(result_register.clone(), expr_value)));
+            (ValueTarget::Local(result_register), tree)
         },
         &Expression::LastValueCont(ref expr) => {
             let (expr_value, expr_tree) = transform_expression(register_counter, expr);
             let result_register = next_register(register_counter);
-            let result_target = AssignTarget::reg(&result_register);
             let tree = InstructionTree::CompoundInstruction(
                 vec!( expr_tree
-                    , InstructionTree::LastValueCont(result_target, expr_value)));
-            (ValueTarget::reg(&result_register), tree)
+                    , InstructionTree::LastValueCont(result_register.clone(), expr_value)));
+            (ValueTarget::Local(result_register), tree)
         },
     }
 }
@@ -319,16 +315,16 @@ pub fn transform_compound_statement(compound_statement: &CompoundStatement) -> V
 #[derive(Clone, Debug)]
 pub enum Instruction {
     Assign(AssignTarget, ValueTarget),
-    ApplyUnOp(AssignTarget, UnaryOperator, ValueTarget),
-    ApplyBinOp(AssignTarget, ValueTarget, InfixBinaryOperator, ValueTarget),
-    IndexInto(AssignTarget, ValueTarget, ValueTarget),
+    ApplyUnOp(Identifier, UnaryOperator, ValueTarget),
+    ApplyBinOp(Identifier, ValueTarget, InfixBinaryOperator, ValueTarget),
+    IndexInto(Identifier, ValueTarget, ValueTarget),
     ConditionalJumpRelative(ValueTarget, isize),
-    CallSubroutine(AssignTarget, SubroutineName, Vec<ValueTarget>),
+    CallSubroutine(Identifier, SubroutineName, Vec<ValueTarget>),
     Return(Option<ValueTarget>),
-    MakeCont(AssignTarget, SubroutineName, Vec<ValueTarget>),
-    RunCont(AssignTarget, Symbol, ValueTarget),
-    IsDoneCont(AssignTarget, ValueTarget),
-    LastValueCont(AssignTarget, ValueTarget),
+    MakeCont(Identifier, SubroutineName, Vec<ValueTarget>),
+    RunCont(Identifier, Symbol, ValueTarget),
+    IsDoneCont(Identifier, ValueTarget),
+    LastValueCont(Identifier, ValueTarget),
     SuspendCont(Symbol, Option<ValueTarget>),
 }
 

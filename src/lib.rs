@@ -1,4 +1,6 @@
 
+#![feature(slice_patterns)]
+
 pub mod ast;
 mod syntax; // lalrpop
 pub mod intermediate;
@@ -125,14 +127,19 @@ fn assert_example_program(program_name: &str) {
     println!("Testing program {}", program_name);
     let program = programs::file_program(format!("examples/{}.drebbel", program_name).as_str());
     assert_ok(&program);
-    let program: Program = program.unwrap();
+    let mut program: Program = program.unwrap();
+    println!("  Transforming entry block");
     jit(&program.entry);
-    for (_, sub) in program.subroutines {
+    for (ref sub_name, ref sub) in &program.subroutines {
         match sub.implementation {
-            Implementation::Block(block) => jit(&block),
+            Implementation::Block(ref block) => {
+                println!("  Transforming subroutine {:?} block", sub_name);
+                jit(&block)
+            },
             _ => panic!("Inconceivable!"),
         };
     }
+    assert_ok(&exec::execute_program(&mut program))
 }
 
 #[test]

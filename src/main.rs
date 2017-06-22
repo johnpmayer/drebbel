@@ -3,7 +3,7 @@ extern crate linefeed;
 
 use drebbel::*;
 use std::env::args;
-use drebbel::ast::{Implementation, Builtin, SubroutineName, Subroutine, VariableName};
+use drebbel::ast::{Implementation};
 
 fn compile(filename: &str) {
     let program = file_program(filename).unwrap();
@@ -33,22 +33,7 @@ fn compile(filename: &str) {
 fn exec(filename: &str) {
     let mut program = file_program(filename).unwrap();
 
-    program.subroutines.insert(SubroutineName(String::from("print")), Subroutine{
-        arguments: vec!(VariableName(String::from("value"))),
-        implementation: Implementation::Builtin(Builtin::Print),
-    });
-
-    program.subroutines.insert(SubroutineName(String::from("newArrayRef")), Subroutine{
-        arguments: vec!(),
-        implementation: Implementation::Builtin(Builtin::NewArrayRef),
-    });
-
-    program.subroutines.insert(SubroutineName(String::from("newHashRef")), Subroutine{
-        arguments: vec!(),
-        implementation: Implementation::Builtin(Builtin::NewHashRef),
-    });
-
-    match exec::execute_program(&program) {
+    match exec::execute_program(&mut program) {
         Ok(()) => println!("Program terminated cleanly"),
         Err(err) => println!("Program crashed with error {:?}", err)
     }

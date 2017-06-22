@@ -94,7 +94,7 @@ pub struct CompoundStatement {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Builtin {
-    Print, NewArrayRef, NewHashRef
+    Print, NewArrayRef, NewHashRef, Push
 }
 
 #[derive(Clone, Debug, PartialEq)]

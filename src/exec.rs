@@ -70,7 +70,7 @@ fn lookup_value(scope: &HashMap<Identifier, Value>, target: &Identifier) -> Resu
 #[derive(Clone)]
 struct Frame {
     running_continuation: Option<(Symbol, Rc<RefCell<Continuation>>)>,
-    call_target: Option<AssignTarget>,
+    call_target: Option<Identifier>,
     instructions: Vec<Instruction>,
     program_counter: usize,
     scope: HashMap<Identifier, Value>,
@@ -96,47 +96,8 @@ impl Frame {
         }
     }
 
-    fn assign(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
-        // TODO: kind of silly that this lives here
-        // The first two make sense, they are 'stack identifiers', but the others don't need to mutate the scope
-        match target {
-            &AssignTarget::Local(ref id) => {
-                self.scope.insert(id.clone(), value);
-                Ok(())
-            },
-            &AssignTarget::Reference(ref reference_value_tgt) => {
-                let reference_value = self.get_value(reference_value_tgt)?;
-                match reference_value {
-                    Value::Ref(ref rc_value) => {
-                        *rc_value.borrow_mut() = value;
-                        Ok(())
-                    }
-                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign to dereferenced non-reference value."))),
-                }
-            },
-            &AssignTarget::AtIndex(ref object_value_tgt, ref index_value_tgt) => {
-                let object_value = self.get_value(object_value_tgt)?;
-                match object_value {
-                    Value::ArrayRef(ref rc) => {
-                        let idx_value = self.get_value(index_value_tgt)?.as_number()?;
-                        let mut vec = rc.borrow_mut();
-                        if idx_value < 0 || idx_value as usize > vec.len() {
-                            return Err(ExecutionError::ArrayIndexOutOfBounds(idx_value))
-                        } else {
-                            let index = idx_value as usize;
-                            vec[index] = value;
-                            Ok(())
-                        }
-                    },
-                    Value::HashRef(ref rc) => {
-                        let index_value = self.get_value(index_value_tgt)?.as_index()?;
-                        rc.borrow_mut().insert(index_value, value);
-                        Ok(())
-                    },
-                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign at index of non-object (array/hash) value."))),
-                }
-            }
-        }
+    fn assign_local(&mut self, id: &Identifier, value: Value) {
+        self.scope.insert(id.clone(), value);
     }
 
     fn assign_subroutine(&mut self, value: Value) -> Result<(), ExecutionError> {
@@ -144,7 +105,7 @@ impl Frame {
             None => return Err(ExecutionError::UnsetReturnTarget),
             Some(ref target) => target.clone()
         };
-        self.assign(&target, value)?;
+        self.assign_local(&target, value);
         self.call_target = None;
         self.running_continuation = None; // TODO: verify this is always correct...
         Ok(())
@@ -185,10 +146,52 @@ impl Stack {
         }
     }
 
-    fn assign_current_frame(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
+    fn assign_current_frame(&mut self, target: &Identifier, value: Value) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.assign(target, value)
+            frame.assign_local(target, value); 
+            Ok(())
         })
+    }
+
+    // TODO: still not great, but better. The second two blocks don't need a mutable reference
+    fn assign(&mut self, target: &AssignTarget, value: Value) -> Result<(), ExecutionError> {
+        match target {
+            &AssignTarget::Local(ref id) => {
+                self.assign_current_frame(id, value)
+            },
+            &AssignTarget::Reference(ref reference_value_tgt) => {
+                let reference_value = self.current_frame()?.get_value(reference_value_tgt)?;
+                match reference_value {
+                    Value::Ref(ref rc_value) => {
+                        *rc_value.borrow_mut() = value;
+                        Ok(())
+                    }
+                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign to dereferenced non-reference value."))),
+                }
+            },
+            &AssignTarget::AtIndex(ref object_value_tgt, ref index_value_tgt) => {
+                let object_value = self.current_frame()?.get_value(object_value_tgt)?;
+                match object_value {
+                    Value::ArrayRef(ref rc) => {
+                        let idx_value = self.current_frame()?.get_value(index_value_tgt)?.as_number()?;
+                        let mut vec = rc.borrow_mut();
+                        if idx_value < 0 || idx_value as usize > vec.len() {
+                            return Err(ExecutionError::ArrayIndexOutOfBounds(idx_value))
+                        } else {
+                            let index = idx_value as usize;
+                            vec[index] = value;
+                            Ok(())
+                        }
+                    },
+                    Value::HashRef(ref rc) => {
+                        let index_value = self.current_frame()?.get_value(index_value_tgt)?.as_index()?;
+                        rc.borrow_mut().insert(index_value, value);
+                        Ok(())
+                    },
+                    _ => return Err(ExecutionError::TypeError(format!("Cannot assign at index of non-object (array/hash) value."))),
+                }
+            }
+        }
     }
 
     fn move_current_program_counter(&mut self, offset: isize) -> Result<(), ExecutionError> {
@@ -231,18 +234,18 @@ impl Stack {
         }
     }
 
-    fn push_subroutine_frame(&mut self, assign_tgt: &AssignTarget, frame: Frame) -> Result<(), ExecutionError> {
+    fn push_subroutine_frame(&mut self, assign_id: &Identifier, frame: Frame) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.call_target = Some(assign_tgt.clone());
+            frame.call_target = Some(assign_id.clone());
             Ok(())
         })?;
         self.frames.push(frame);
         Ok(())
     }
 
-    fn push_coroutine_frames(&mut self, assign_tgt: &AssignTarget, symbol: &Symbol, cont_ref: Rc<RefCell<Continuation>>) -> Result<(), ExecutionError> {
+    fn push_coroutine_frames(&mut self, assign_id: &Identifier, symbol: &Symbol, cont_ref: Rc<RefCell<Continuation>>) -> Result<(), ExecutionError> {
         self.with_current_frame(|mut frame| {
-            frame.call_target = Some(assign_tgt.clone());
+            frame.call_target = Some(assign_id.clone());
             frame.running_continuation = Some((symbol.clone(), cont_ref.clone()));
             Ok(())
         })?;
@@ -277,7 +280,7 @@ impl Stack {
             Ok(())
         })?;
 
-        let cont_assign_target: AssignTarget = self.current_frame()?.call_target.clone().ok_or(ExecutionError::UnsetReturnTarget)?;
+        let cont_assign_target: Identifier = self.current_frame()?.call_target.clone().ok_or(ExecutionError::UnsetReturnTarget)?;
 
         self.assign_current_frame(&cont_assign_target, Value::Unit)
     }
@@ -309,10 +312,42 @@ fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, Ex
             Ok(Value::ArrayRef(Rc::new(RefCell::new(Vec::new())))),
         Builtin::NewHashRef => 
             Ok(Value::HashRef(Rc::new(RefCell::new(HashMap::new())))),
+        Builtin::Push =>
+            match arguments.as_slice() {
+                &[Value::ArrayRef(ref rc_array), ref elem] => {
+                    rc_array.borrow_mut().push(elem.clone());
+                    Ok(Value::Unit)
+                }
+                _ => Err(ExecutionError::TypeError(format!("Can only push onto an array ref")))
+            },
     }
 }
 
-pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
+pub fn attach_builtins(program: &mut Program) {
+    program.subroutines.insert(SubroutineName(String::from("print")), Subroutine{
+        arguments: vec!(VariableName(String::from("value"))),
+        implementation: Implementation::Builtin(Builtin::Print),
+    });
+
+    program.subroutines.insert(SubroutineName(String::from("newArrayRef")), Subroutine{
+        arguments: vec!(),
+        implementation: Implementation::Builtin(Builtin::NewArrayRef),
+    });
+
+    program.subroutines.insert(SubroutineName(String::from("newHashRef")), Subroutine{
+        arguments: vec!(),
+        implementation: Implementation::Builtin(Builtin::NewHashRef),
+    });
+
+    program.subroutines.insert(SubroutineName(String::from("push")), Subroutine{
+        arguments: vec!(VariableName(String::from("arrayref")), VariableName(String::from("elem"))),
+        implementation: Implementation::Builtin(Builtin::Push),
+    });
+}
+
+pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
+
+    attach_builtins(program);
 
     let mut stack = Stack::new(Frame::new(jit(&program.entry)));
 
@@ -332,7 +367,7 @@ pub fn execute_program(program: &Program) -> Result<(), ExecutionError> {
         let _: () = match instruction {
             Instruction::Assign(ref assign_tgt, ref value_tgt) => {
                 let value = stack.current_frame()?.get_value(value_tgt)?;
-                stack.assign_current_frame(assign_tgt, value)?;
+                stack.assign(assign_tgt, value)?;
             },
             Instruction::ApplyUnOp(ref assign_tgt, ref op, ref value_tgt) => {
                 let value = stack.current_frame()?.get_value(value_tgt)?;
