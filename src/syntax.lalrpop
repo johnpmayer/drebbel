@@ -24,6 +24,7 @@ Literal: Literal = {
     <n:Num> => Literal::Number(n),
     "TRUE" => Literal::Boolean(true),
     "FALSE" => Literal::Boolean(false),
+    "UNIT" => Literal::Unit,
     <s:Symbol> => Literal::Symbol(s),
 };
 

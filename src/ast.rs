@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
+    Unit,
     Number(i64),
     Boolean(bool),
     Symbol(Symbol),

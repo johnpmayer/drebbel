@@ -131,6 +131,7 @@ impl Frame {
 
     fn get_value(&self, target: &ValueTarget) -> Result<Value, ExecutionError> {
         match target {
+            &ValueTarget::Literal(Literal::Unit) => Ok(Value::Unit),
             &ValueTarget::Literal(Literal::Number(i)) => Ok(Value::Number(i)),
             &ValueTarget::Literal(Literal::Boolean(b)) => Ok(Value::Boolean(b)),
             &ValueTarget::Literal(Literal::Symbol(ref s)) => Ok(Value::Symbol(s.clone())),
@@ -394,6 +395,10 @@ pub fn execute_program(program: &mut Program) -> Result<(), ExecutionError> {
                     (&Value::Boolean(l), &InfixBinaryOperator::And, &Value::Boolean(r)) => Value::Boolean(l && r),
                     (&Value::Boolean(l), &InfixBinaryOperator::Or, &Value::Boolean(r)) => Value::Boolean(l || r),
                     (&Value::Number(l), &InfixBinaryOperator::Eq, &Value::Number(r)) => Value::Boolean(l == r),
+                    (&Value::Boolean(l), &InfixBinaryOperator::Eq, &Value::Boolean(r)) => Value::Boolean(l == r),
+                    (&Value::Unit, &InfixBinaryOperator::Eq, &Value::Unit) => Value::Boolean(true),
+                    (&Value::Symbol(ref l), &InfixBinaryOperator::Eq, &Value::Symbol(ref r)) => Value::Boolean(*l == *r),
+                    (_, &InfixBinaryOperator::Eq, _) => Value::Boolean(false), // Blunt
                     (&Value::Number(l), &InfixBinaryOperator::Lt, &Value::Number(r)) => Value::Boolean(l < r),
                     _ => return Err(ExecutionError::TypeError(format!("Can't apply {:?} to {:?} and {:?}", l_value, op, r_value)))
                 };

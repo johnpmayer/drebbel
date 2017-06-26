@@ -1,0 +1,84 @@
+SUB spawn (contRef)
+BEGIN
+    thread := newHashRef();
+    thread[:state] := :ready;
+    thread[:contRef] := contRef;
+
+    msg := newHashRef();
+    msg[:action] := :spawn;
+    msg[:thread] := thread;
+
+    SUSPEND :green msg
+END.
+
+
+SUB scheduler (contRef)
+BEGIN
+    main_thread := newHashRef();
+    main_thread[:state] := :ready;
+    main_thread[:contRef] := contRef;
+
+    threads := newArrayRef();
+    push(threads, main_thread);
+    count := 1;
+
+    alive := TRUE;
+
+    WHILE alive DO
+        alive := FALSE;
+
+        i := 0;
+        WHILE i < count DO
+
+            thread := threads[i];
+
+            IF thread[:state] == :ready THEN
+                result := RUN :green thread[:contRef];
+
+                last := result[:last];
+
+                IF !(last == UNIT) THEN
+                    IF last[:action] == :spawn THEN
+                        newThread := last[:thread];
+                        push(threads, newThread);
+                        count := count + 1;
+                    ELSE FI;
+                ELSE FI;
+
+                IF result[:done] THEN
+                    thread[:state] := :done;
+                ELSE FI;
+
+                IF thread[:state] == :ready THEN
+                    alive := TRUE
+                ELSE FI;
+
+            ELSE FI;
+
+            i := i + 1;
+        DONE
+    DONE
+END.
+
+SUB worker (name)
+BEGIN
+    a := 0;
+
+    WHILE a < 50
+    DO
+        print(name, a);
+        a := a + 1;
+        SUSPEND :green
+    DONE
+END.
+
+SUB main ()
+BEGIN
+    print(:main);
+    spawn(CONT worker(:a));
+    spawn(CONT worker(:b));
+END.
+
+BEGIN
+    scheduler(CONT main())
+END.
