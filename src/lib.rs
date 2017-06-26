@@ -144,15 +144,16 @@ fn assert_example_program(program_name: &str) {
 
 #[test]
 fn test_file_programs() {
-    assert_example_program("program");
-    assert_example_program("recursion");
-    assert_example_program("loop");
-    assert_example_program("generator");
-    assert_example_program("exception");
+    assert_example_program("control/sub");
+    assert_example_program("control/recursion");
+    assert_example_program("control/loop");
     assert_example_program("references/simple");
     assert_example_program("references/lhs");
     assert_example_program("collections/array");
     assert_example_program("collections/hash");
+    assert_example_program("effects/generator");
+    assert_example_program("effects/exception");
+    assert_example_program("effects/green");
 }
 
 #[test]
