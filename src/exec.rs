@@ -306,9 +306,7 @@ pub enum ExecutionError {
 fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
     match *builtin {
         Builtin::Print => {
-            for arg in arguments {
-                println!("--> {:?}", arg);
-            }
+            println!("--> {:?}", arguments);
             Ok(Value::Unit)
         },
         Builtin::NewArrayRef =>
