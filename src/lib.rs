@@ -1,5 +1,5 @@
 
-#![feature(slice_patterns)]
+// #![feature(slice_patterns)]
 
 pub mod ast;
 mod syntax; // lalrpop

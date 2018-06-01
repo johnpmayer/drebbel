@@ -314,8 +314,8 @@ fn execute_builtin(builtin: &Builtin, arguments: Vec<Value>) -> Result<Value, Ex
         Builtin::NewHashRef => 
             Ok(Value::HashRef(Rc::new(RefCell::new(HashMap::new())))),
         Builtin::Push =>
-            match arguments.as_slice() {
-                &[Value::ArrayRef(ref rc_array), ref elem] => {
+            match (arguments.get(0), arguments.get(1)) {
+                (Some(&Value::ArrayRef(ref rc_array)), Some(elem)) => {
                     rc_array.borrow_mut().push(elem.clone());
                     Ok(Value::Unit)
                 }
