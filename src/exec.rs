@@ -161,12 +161,12 @@ impl Stack {
     fn with_current_frame<F, T>(&mut self, f: F) -> Result<T, ExecutionError> where F: FnOnce(&mut Frame) -> Result<T, ExecutionError> {
         match self.frames.last_mut() {
             None => Err(ExecutionError::StackUnderflow),
-            Some(mut frame) => f(frame)
+            Some(frame) => f(frame)
         }
     }
 
     fn assign_current_frame(&mut self, target: &Identifier, value: Value) -> Result<(), ExecutionError> {
-        self.with_current_frame(|mut frame| {
+        self.with_current_frame(|frame| {
             frame.assign_local(target, value); 
             Ok(())
         })
@@ -235,7 +235,7 @@ impl Stack {
                 if self.frames.is_empty() {
                     Ok(Some(exited_frame))
                 } else {
-                    self.with_current_frame(|mut frame| frame.on_pop(value))?;
+                    self.with_current_frame(|frame| frame.on_pop(value))?;
                     Ok(None)
                 }
             },
